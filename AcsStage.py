@@ -442,7 +442,7 @@ class MachineGui(QtGui.QMainWindow):
 		self.result = 'Cancelled'
 		# define window		xLoc,yLoc,xDim,yDim
 		self.setGeometry(10, 30, 250, 315)
-		self.setWindowTitle("ACS Stage v5")
+		self.setWindowTitle("ACS Stage v6")
 		self.setWindowFlags(QtCore.Qt.WindowStaysOnTopHint)
 #		grid = QtGui.QGridLayout(self)
 		self.beamlabel = QtGui.QLabel('Beam length',self)
