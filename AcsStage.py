@@ -420,7 +420,7 @@ class Machine:
 		feedback = np.array([[sb*cc, -sc, cb*cc, 0, 0, -self.BeamLength*cb*cc], [sb*sc, cc, cb*sc, 0, 0, -self.BeamLength*cb*sc], [-cb, 0, sb, 0, 0, -self.BeamLength*sb], [0, 0, 0, -1, 0, 180.0/2], [0, 0, 0, 0, -1, math.copysign(180.0, c)], [0, 0, 0, 0, 0, 1]], dtype=float)
 		return direct, feedback
 	def GetKinematicMatricesByMachine(self, b, c):
-		b, c = b*math.pi/180, c*math.pi/180
+		b, c = b*math.pi/180, c*math.pi/180  # Convert to radians
 		sb, cb, sc, cc = math.sin(b), math.cos(b), math.sin(c), math.cos(c)		
 		direct = np.array([[-cb*cc, cb*sc, -sb, 0], [-sc, -cc, 0, 0], [-sb*cc, sb*sc, cb, self.BeamLength], [0, 0, 0, 1]], dtype=float)
 		feedback = np.array([[-cb*cc, -sc, -sb*cc, self.BeamLength*sb*cc], [cb*sc, -cc, sb*sc, -self.BeamLength*sb*sc], [-sb, 0, cb, -self.BeamLength*cb], [0, 0, 0, 1]], dtype=float)
@@ -637,10 +637,10 @@ class MachineGui(QtGui.QMainWindow):
 				if not self.Run: return
 				els = row.replace(',','\t').split('\t')
 				elsnp = np.array(els, dtype=float)
-				if (len(elsnp) > 5): flen = elsnp[5]
-				vpart = np.append(elsnp[:5], 1.0)
-				print('********************vpart:', vpart)
-				vprincipal, vmachine = vpart, vpart
+				if (len(elsnp) > 5): flen = elsnp[5]  # Receives length from the GUI window
+				vpart = np.append(elsnp[:5], 1.0)  # Switches the input vector to homogenous form -> vpart
+				print('vpart:', vpart)
+				vprincipal, vmachine = vpart, vpart  # Initialization of vprincipal, vmachine homogenous vectors
 				if coor == 'part':
 					dx, dy, dz = self.Spherical2projections(vpart[3:5])
 					print('dx/dy/dz:', dx, dy, dz)
@@ -661,27 +661,30 @@ class MachineGui(QtGui.QMainWindow):
 					fprincipal = fkinematic @ vmachine
 					fpart = fprincipal
 				elif coor == 'mixed':
-					vprincipal = fixture @ np.array([vpart[0], vpart[1], vpart[2], 1.0])
-					#print('principal:', vprincipal)
-					b, c = -vpart[3]-offs[4], vpart[4]-offs[5]
+					vprincipal = fixture @ np.array([vpart[0], vpart[1], vpart[2], 1.0])  # Multiplication fixture by xyz1 input vector
+					print('principal:', vprincipal)
+					b, c = -vpart[3]-offs[4], vpart[4]-offs[5]  # B sign inversion
 					kinematic, fkinematic = self.machine.GetKinematicMatricesByMachine(b, c)
+					print('kinematic:', kinematic)
 					vmachine = kinematic @ vprincipal
 					fprincipal = fkinematic @ vmachine
 					fpart = ffixture @ fprincipal
 					vmachine = np.append(vmachine[:3], [b, c, 1.0])
+					print('vmachine:', vmachine)
 					fprincipal = np.append(fprincipal[:3], [vpart[3], vpart[4], 1.0])
 					fpart = np.append(fpart[:3], [vpart[3], vpart[4], 1.0])
 				elif coor == 'machine':
 					vmachine = vpart
-					vmachine[0] = -vmachine[0]
-					vmachine[1] = -vmachine[1]
-					vmachine[3] = -vmachine[3]
+					#vmachine[0] = -vmachine[0]
+					#vmachine[1] = -vmachine[1]
+					#vmachine[3] = -vmachine[3]
 					fpart = vpart
 				dvec = vpart - fpart
-				print('fpart:', fpart)
-				print('difference:', dvec)
-				if any(d > 1.e-6 for d in dvec): print('@@@@@@@@@@@@@@@@@@@@@@@@@@')
+				#print('fpart:', fpart)
+				#print('difference:', dvec)
+				#if any(d > 1.e-6 for d in dvec): print('@@@@@@@@@@@@@@@@@@@@@@@@@@')
 				vec = np.append(vmachine[:5], flen)
+				print('flen:', flen)
 				self.XYZBC = vec
 				self.machine.XYZBC = vec
 				FreeCAD.Gui.updateGui()
