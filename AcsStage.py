@@ -675,9 +675,12 @@ class MachineGui(QtGui.QMainWindow):
 					fpart = np.append(fpart[:3], [vpart[3], vpart[4], 1.0])
 				elif coor == 'machine':
 					vmachine = vpart
-					#vmachine[0] = -vmachine[0]
-					#vmachine[1] = -vmachine[1]
-					#vmachine[3] = -vmachine[3]
+					vmachine[0] = -vmachine[0]
+					vmachine[1] = -vmachine[1]
+					vmachine[3] = -vmachine[3]
+					fpart = vpart
+				elif coor == 'machine_dll':
+					vmachine = vpart
 					fpart = vpart
 				dvec = vpart - fpart
 				#print('fpart:', fpart)
