@@ -37,7 +37,7 @@ def Indexer(doc):
 	body.Placement.Rotation.Axis = Vector(0,0,1)
 
 	lcs = body.newObject('PartDesign::CoordinateSystem', 'I_LCS')
-	lcs.Placement = Placement(Vector(0,0,-52), Vector(0,0,1), 180)	
+	lcs.Placement = Placement(Vector(0,0,-52), Vector(0,0,1), 180)
 
 	cyl2 = body.newObject('PartDesign::AdditiveCylinder','ICylinder')
 	cyl2.Radius,cyl2.Height = 60,25
@@ -619,7 +619,7 @@ class MachineGui(QtGui.QMainWindow):
 				desc = json.loads(row)
 				coor = desc['coordinates']
 				row = f.readline()
-			if coor != 'machine':
+			# if coor != 'machine':
 				flen = desc['focallength']
 			else:
 				flen = 52
