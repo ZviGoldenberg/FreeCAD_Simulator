@@ -663,7 +663,7 @@ class MachineGui(QtGui.QMainWindow):
 				elif coor == 'mixed':
 					vprincipal = fixture @ np.array([vpart[0], vpart[1], vpart[2], 1.0])  # Multiplication fixture by xyz1 input vector
 					print('principal:', vprincipal)
-					b, c = -vpart[3]-offs[4], vpart[4]-offs[5]  # B sign inversion
+					b, c = -vpart[3]-offs[4], -vpart[4]-offs[5]  # B and C sign inversion
 					kinematic, fkinematic = self.machine.GetKinematicMatricesByMachine(b, c)
 					print('kinematic:', kinematic)
 					vmachine = kinematic @ vprincipal
@@ -678,6 +678,7 @@ class MachineGui(QtGui.QMainWindow):
 					vmachine[0] = -vmachine[0]
 					vmachine[1] = -vmachine[1]
 					vmachine[3] = -vmachine[3]
+					vmachine[4] = -vmachine[4]
 					fpart = vpart
 				elif coor == 'machine_dll':
 					vmachine = vpart
