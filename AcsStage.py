@@ -1,6 +1,6 @@
 import math, time
 import platform
-
+#from platform import machine
 import Part, Sketcher, Draft
 from FreeCAD import Vector, Matrix, Placement
 from PySide import QtGui, QtCore
@@ -17,6 +17,14 @@ def Link(doc, object, name, copies=0):
     return link
 
 
+def LinkGroup(doc, parts, name):
+    group = doc.addObject('App::DocumentObjectGroup', name + '_')
+    group.Group = parts
+    group.ViewObject.Visibility = False
+    link = Link(doc, group, name)
+    return link
+
+
 def Mark(doc, visibility=True):
     mark = Draft.makePolygon(3, radius=5, inscribed=True, face=True, support=None)
     mark.ViewObject.ShapeColor = (0., 0., 0.)
@@ -24,330 +32,247 @@ def Mark(doc, visibility=True):
     return mark
 
 
+def CirclePoint(radius, angle):
+    return Vector(radius * math.cos(angle), radius * math.sin(angle), 0)
+
+
 def RotaryScale(doc, name, radius):
-    FreeCAD.Console.PrintMessage('>>>>Rotary Scale Start (' + name + ')\n')
-    body = doc.addObject('PartDesign::Body', name)
-    mark = Mark(doc)
-    mark.Placement = Placement(Vector(radius + 5, 0, 0), Vector(0, 0, 1), 180)
-    main = Draft.makeWire([Vector(radius, 0, 0), Vector(radius + 5, 0, 0)])
-    mains = Draft.make_polar_array(main, number=8, angle=360.0, use_link=True)
-    tick = Draft.makeWire([Vector(radius, 0, 0), Vector(radius + 2.5, 0, 0)])
-    ticks = Draft.make_polar_array(tick, number=72, angle=360.0, use_link=True)
-    body.Group = (mark, mains, ticks)
-    body.ViewObject.Visibility = False
-    FreeCAD.Console.PrintMessage('>>>>Rotary Scale End\n')
-    return body
+    sketch = doc.addObject('Sketcher::SketchObject', name)
+    sketch.Geometry = [Part.LineSegment(CirclePoint(radius, 2 * math.pi * i / 72),
+                                        CirclePoint(radius + (5 if i % 9 == 0 else 2.5), 2 * math.pi * i / 72)) for i in
+                       range(72)]
+    sketch.ViewObject.PointColor, sketch.ViewObject.LineColor = (0., 0., 0.), (0., 0., 0.)
+    sketch.ViewObject.LineWidth, sketch.ViewObject.PointSize = 2, 2
+    sketch.ViewObject.Visibility = True
+    return sketch
 
 
-def Indexer(doc):
+def Indexer(doc, dim):
+    # see file:///C:\Projects\ACS\5axes\AcsStageModel\FreeCad\acsstage.pdf
     body = doc.addObject('PartDesign::Body', 'Indexer')
-    body.Placement.Rotation.Axis = Vector(0, 0, 1)
-
-    lcs = body.newObject('PartDesign::CoordinateSystem', 'I_LCS')
-    lcs.Placement = Placement(Vector(0, 0, -52), Vector(0, 0, 1), 180)
-
+    xy = doc.getObject('XY_Plane')
     cyl2 = body.newObject('PartDesign::AdditiveCylinder', 'ICylinder')
-    cyl2.Radius, cyl2.Height = 60, 25
-    cyl2.Support, cyl2.MapMode = lcs, 'ObjectXY'
-    cyl2.AttachmentOffset.Base = Vector(0, 0, -25)
+    cyl2.Radius, cyl2.Height = dim[0], dim[1]
+    cyl2.Support, cyl2.MapMode = xy, 'ObjectXY'
+    cyl2.AttachmentOffset.Base = Vector(0, 0, -dim[1] - dim[2])
 
     for i in range(6):
         cyl = body.newObject('PartDesign::SubtractiveCylinder', 'ICyl')
-        cyl.Radius, cyl.Height = 5, 25
-        cyl.Support, cyl.MapMode = lcs, 'ObjectXY'
-        cyl.AttachmentOffset.Base = Vector(30 * math.sin(i * math.pi / 3), 30 * math.cos(i * math.pi / 3), -25)
+        cyl.Radius, cyl.Height = 5, dim[1]
+        cyl.Support, cyl.MapMode = xy, 'ObjectXY'
+        cyl.AttachmentOffset.Base = Vector(dim[0] / 2 * math.sin(i * math.pi / 3),
+                                           dim[0] / 2 * math.cos(i * math.pi / 3), -dim[1] - dim[2])
 
     mark = Mark(doc)
-    mark.Support, mark.MapMode = lcs, 'ObjectXY'
-    mark.AttachmentOffset = Placement(Vector(0, 55, 0.1), Vector(0, 0, 1), 90)
+    mark.Support, mark.MapMode = xy, 'ObjectXY'
+    mark.AttachmentOffset = Placement(Vector(0, -dim[0] + 5, -dim[2] + 0.001), Vector(0, 0, 1), -90)
     body.addObject(mark)
     body.ViewObject.Visibility = False
     return body
 
 
-def Gimbal(doc):
-    sketch = doc.addObject("Sketcher::SketchObject", "GSketch")
-    pc = ((-49, 0), (-65, -52), (-65, -77), (65, -77), (65, -52), (49, 0))
-    points = [Vector(p[0], p[1], 0) for p in pc]
-    geom = [Part.LineSegment(points[i], points[i + 1]) for i in range(len(points) - 1)]
-    geom.append(Part.ArcOfCircle(Part.Circle(Vector(0, 0, 0), Vector(0, 0, 1), 49), 0, math.pi))
-    sketch.Geometry = geom
-    n = len(geom)
-    sketch.addConstraint(Sketcher.Constraint('Vertical', 1))
-    sketch.addConstraint(Sketcher.Constraint('Symmetric', 1, 1, 3, 2, -2))
-    sketch.addConstraint(Sketcher.Constraint('Symmetric', 1, 2, 3, 1, -2))
-    sketch.addConstraint(Sketcher.Constraint('Radius', n - 1, 49))
-    sketch.addConstraint(Sketcher.Constraint('DistanceX', 2, 1, 2, 2, 130))
-    sketch.addConstraint(Sketcher.Constraint('DistanceY', 2, 1, -1, 1, 77))
-    sketch.addConstraint(Sketcher.Constraint('DistanceY', 1, 1, 1, 2, -25))
-    for i in range(n - 2): sketch.addConstraint(Sketcher.Constraint('Coincident', i, 2, i + 1, 1))
-    sketch.addConstraint(Sketcher.Constraint('Coincident', n - 1, 3, -1, 1))
-    sketch.addConstraint(Sketcher.Constraint('Tangent', n - 2, 2, n - 1, 1))
-    sketch.addConstraint(Sketcher.Constraint('Tangent', n - 1, 2, 0, 1))
-
+def Gimbal(doc, dim):
+    # see file:///C:\Projects\ACS\5axes\AcsStageModel\FreeCad\acsstage.pdf
     body = doc.addObject('PartDesign::Body', 'Gimbal')
     body.Placement.Rotation.Axis = Vector(0, 1, 0)
     body.ViewObject.Visibility = False
 
-    lcs = body.newObject('PartDesign::CoordinateSystem', 'G_LCS')
-    lcs.Placement = Placement(Vector(0, 0, -52), Vector(0, 0, 1), 180)
-
+    xy = doc.getObject('XY_Plane')
     xz = doc.getObject('XZ_Plane')
-    sketch.Support, sketch.MapMode = xz, 'FlatFace'
-    pad = body.newObject('PartDesign::Pad', 'GPad')
-    pad.Profile, pad.Length, pad.Midplane = sketch, 278, 1
+    yz = doc.getObject('YZ_Plane')
 
-    cyl = body.newObject('PartDesign::AdditiveCylinder', 'GCylinder')
-    cyl.Radius, cyl.Height = 32.5, 314
-    cyl.Support, cyl.MapMode = xz, 'ObjectXY'
-    cyl.AttachmentOffset.Base = Vector(0, 0, -cyl.Height / 2)
+    g001 = body.newObject('PartDesign::AdditiveBox', 'G001')
+    g001.Length, g001.Width, g001.Height = dim[1], dim[0], dim[7]
+    g001.Support, g001.MapMode = xy, 'ObjectXY'
+    g001.AttachmentOffset.Base = Vector(-dim[1] / 2, -dim[3], -dim[9])
 
-    cyl1 = body.newObject('PartDesign::SubtractiveCylinder', 'GCylinder1')
-    cyl1.Radius, cyl1.Height = 6.5, 314
-    cyl1.Support, cyl1.MapMode = xz, 'ObjectXY'
-    cyl1.AttachmentOffset.Base = Vector(0, 0, -cyl1.Height / 2)
+    # see file:///C:\Projects\ACS\5axes\AcsStageModel\FreeCad\gimbalgeometry.jpg
+    a, b, r = dim[9] - dim[7], dim[1] / 2, dim[10]
+    d_2 = a * a + b * b
+    d, l = math.sqrt(d_2), math.sqrt(d_2 - r * r)
+    h, s = l * (a * l + b * r) / d_2, b - l * (b * l - a * r) / d_2
+    g002 = body.newObject('PartDesign::AdditiveWedge', 'G002')
+    g002.Xmin, g002.Xmax, g002.Ymin, g002.Ymax, g002.Zmin, g002.Zmax = -dim[3], dim[0] - dim[3], 0, h, -dim[1] / 2, dim[
+        1] / 2
+    g002.X2min, g002.X2max, g002.Z2min, g002.Z2max = g002.Xmin, g002.Xmax, -s, s
+    g002.Support, g002.MapMode = xy, 'ObjectYZ'
+    g002.AttachmentOffset.Base = Vector(0, dim[7] - dim[9], 0)
 
-    box = body.newObject('PartDesign::SubtractiveBox', 'GBox')
-    box.Length, box.Width, box.Height = 130, 250, 150
-    box.Support, box.MapMode = lcs, 'ObjectXY'
-    box.AttachmentOffset.Base = Vector(-box.Length / 2, -box.Width / 2, 0)
+    g003 = body.newObject('PartDesign::AdditiveCylinder', 'G003')
+    g003.Radius, g003.Height = r, dim[0]
+    g003.Support, g003.MapMode = xz, 'ObjectXY'
+    g003.AttachmentOffset.Base = Vector(0, 0, -dim[3])
 
-    cyl2 = body.newObject('PartDesign::SubtractiveCylinder', 'GCylinder2')
-    cyl2.Radius, cyl2.Height = 60, 25
-    cyl2.Support, cyl2.MapMode = lcs, 'ObjectXY'
-    cyl2.AttachmentOffset.Base = Vector(0, 0, -25)
+    if dim[12] > 0:
+        g004 = body.newObject('PartDesign::AdditiveCylinder', 'G004')
+        g004.Radius, g004.Height = dim[11], dim[0] + 2 * dim[12]
+        g004.Support, g004.MapMode = xz, 'ObjectXY'
+        g004.AttachmentOffset.Base = Vector(0, 0, -dim[3] - dim[12])
+        g005 = body.newObject('PartDesign::SubtractiveCylinder', 'G005')
+        g005.Radius, g005.Height = 5, dim[0] + 2 * dim[12]
+        g005.Support, g005.MapMode = xz, 'ObjectXY'
+        g005.AttachmentOffset.Base = Vector(0, 0, -dim[3] - dim[12])
+        g006 = Mark(doc)
+        g006.Support, g006.MapMode = xz, 'FlatFace'
+        g006.AttachmentOffset = Placement(Vector(0, -dim[11] + 5, dim[3] + dim[12] + 0.001), Vector(0, 0, 1), -90)
+        body.addObject(g006)
+        g007 = doc.copyObject(g006, False)
+        g007.AttachmentOffset.Base = Vector(0, -dim[11] + 5, -dim[0] + dim[3] - dim[12] - 0.001)
+        body.addObject(g007)
+    else:
+        g004 = body.newObject('PartDesign::SubtractiveCylinder', 'G004')
+        g004.Radius, g004.Height = dim[11], dim[0]
+        g004.Support, g004.MapMode = xz, 'ObjectXY'
+        g004.AttachmentOffset.Base = Vector(0, 0, -dim[3])
+        g005 = RotaryScale(doc, 'G005', dim[11])
+        g005.Support, g005.MapMode = xz, 'FlatFace'
+        g005.AttachmentOffset = Placement(Vector(0, 0, dim[3] + 0.001), Vector(0, 0, 1), 0)
+        body.addObject(g005)
+        g006 = doc.copyObject(g005, False)
+        g006.AttachmentOffset.Base = Vector(0, 0, -dim[0] + dim[3] - 0.001)
+        body.addObject(g006)
+        g007 = Mark(doc)
+        g007.Support, g007.MapMode = xz, 'FlatFace'
+        g007.AttachmentOffset = Placement(Vector(0, -dim[11] - 5, dim[3] + 0.001), Vector(0, 0, 1), 90)
+        body.addObject(g007)
+        g008 = doc.copyObject(g007, False)
+        g008.AttachmentOffset.Base = Vector(0, -dim[11] - 5, -dim[0] + dim[3] - 0.001)
+        body.addObject(g008)
 
-    sketch.ViewObject.Visibility = False
+    if dim[4] >= 0:
+        pass
+    else:
+        g010 = body.newObject('PartDesign::SubtractiveCylinder', 'G010')
+        g010.Radius, g010.Height = dim[5], dim[2]
+        g010.Support, g010.MapMode = xy, 'ObjectXY'
+        g010.AttachmentOffset.Base = Vector(0, 0, -dim[9])
+        g011 = RotaryScale(doc, 'G011', dim[5])
+        g011.Support, g011.Placement = xy, Placement(Vector(0, 0, dim[2] - dim[9]), Vector(0, 0, 1), 0)
+        body.addObject(g011)
+        g012 = Mark(doc)
+        g012.Support, g012.Placement = xy, Placement(Vector(0, -dim[5] - 5, dim[2] - dim[9]), Vector(0, 0, 1), 90)
+        body.addObject(g012)
+
+    g020 = body.newObject('PartDesign::SubtractiveBox', 'G020')
+    g020.Length, g020.Width, g020.Height = dim[1], dim[0] - 2 * dim[6], dim[9] + dim[10]
+    g020.Support, g020.MapMode = xy, 'ObjectXY'
+    g020.AttachmentOffset.Base = Vector(-g020.Length / 2, dim[6] - dim[3], dim[2] - dim[9])
+    g020.Refine = True
+    if dim[13] > 0:
+        g021 = body.newObject('PartDesign::SubtractiveCylinder', 'G021')
+        g021.Radius, g021.Height = dim[13], dim[0] - 2 * dim[6]
+        g021.Support, g021.MapMode = xz, 'ObjectXY'
+        g021.AttachmentOffset.Base = Vector(0, 0, -dim[3] - dim[12])
+
     return body
 
 
-def GimbalFrame(doc):
-    FreeCAD.Console.PrintMessage('>>>>Gimbal Frame Start\n')
-    sketch = doc.addObject("Sketcher::SketchObject", "FSketch")
-    pc = ((-49, 0), (-74, -52), (-74, -102.5), (74, -102.5), (74, -52), (49, 0))
-    pts = [Vector(p[0], p[1], 0) for p in pc]
-    sketch.Geometry = [Part.LineSegment(pts[i], pts[i + 1]) for i in range(len(pts) - 1)]
-    sketch.addGeometry(Part.ArcOfCircle(Part.Circle(Vector(0, 0, 0), Vector(0, 0, 1), 49), 0, math.pi))
-    n = len(pts)
-    sketch.addConstraint(Sketcher.Constraint('Vertical', 1))
-    sketch.addConstraint(Sketcher.Constraint('Symmetric', 1, 1, 3, 2, -2))
-    sketch.addConstraint(Sketcher.Constraint('Symmetric', 1, 2, 3, 1, -2))
-    sketch.addConstraint(Sketcher.Constraint('Radius', n - 1, 49))
-    sketch.addConstraint(Sketcher.Constraint('DistanceX', 2, 1, 2, 2, 148))
-    sketch.addConstraint(Sketcher.Constraint('DistanceY', 2, 1, -1, 1, 102.5))
-    sketch.addConstraint(Sketcher.Constraint('DistanceY', 1, 1, 1, 2, -25))
-    for i in range(n - 2): sketch.addConstraint(Sketcher.Constraint('Coincident', i, 2, i + 1, 1))
-    sketch.addConstraint(Sketcher.Constraint('Coincident', n - 1, 3, -1, 1))
-    sketch.addConstraint(Sketcher.Constraint('Tangent', n - 2, 2, n - 1, 1))
-    sketch.addConstraint(Sketcher.Constraint('Tangent', n - 1, 2, 0, 1))
-
-    body = doc.addObject('PartDesign::Body', 'GimbalFrame')
-    xz = doc.getObject('XZ_Plane')
-    sketch.Support, sketch.MapMode = xz, 'FlatFace'
-    pad = body.newObject('PartDesign::Pad', 'FPad')
-    pad.Profile, pad.Length, pad.Midplane = sketch, 314, 1
-
-    cyl = body.newObject('PartDesign::SubtractiveCylinder', 'FCylinder')
-    cyl.Radius, cyl.Height = 32.5, 314
-    cyl.Support, cyl.MapMode = xz, 'ObjectXY'
-    cyl.AttachmentOffset.Base = Vector(0, 0, -cyl.Height / 2)
-
-    fcyl1 = body.newObject('PartDesign::SubtractiveCylinder', 'FCylinder1')
-    fcyl1.Radius, fcyl1.Height = 101, 280
-    fcyl1.Support, fcyl1.MapMode = xz, 'ObjectXY'
-    fcyl1.AttachmentOffset.Base = Vector(0, 0, -fcyl1.Height / 2)
-
-    box = body.newObject('PartDesign::SubtractiveBox', 'FBox')
-    box.Length, box.Width, box.Height = 148, 154, 280
-    box.Support, box.MapMode = xz, 'ObjectXY'
-    box.AttachmentOffset.Base = Vector(-box.Length / 2, -box.Width / 2, -box.Height / 2)
-
-    sketch.ViewObject.Visibility = False
-    body.ViewObject.Visibility = False
-    FreeCAD.Console.PrintMessage('>>>>Gimbal Frame End\n')
-    return body
-
-
-def YBase(doc):
+def YBase(doc, dim):
+    # see file:///C:\Projects\ACS\5axes\AcsStageModel\FreeCad\acsstage.pdf
     body = doc.addObject('PartDesign::Body', 'YBase')
     box = body.newObject('PartDesign::AdditiveBox', 'YBox')
-    box.Length, box.Width, box.Height = 158, 40, 550
-    box.Support, box.MapMode = doc.getObject('XZ_Plane'), 'ObjectXY'
-    box.AttachmentOffset.Base = Vector(-77, -142, -box.Height / 2)
-    body.ViewObject.Visibility = False
-    return body
-
-
-def XBase(doc):
-    body = doc.addObject('PartDesign::Body', 'XBase')
-    box = body.newObject('PartDesign::AdditiveBox', 'XBox')
-    box.Length, box.Width, box.Height = 450, 40, 550
-    box.Support, box.MapMode = doc.getObject('YZ_Plane'), 'ObjectXY'
-    box.AttachmentOffset.Base = Vector(-box.Length / 2, -182, -box.Height / 2)
-    body.ViewObject.Visibility = False
-    return body
-
-
-def ZBase(doc):
-    body = doc.addObject('PartDesign::Body', 'ZBase')
-    box = body.newObject('PartDesign::AdditiveBox', 'ZBox')
-    box.Length, box.Width, box.Height = 275 - 198 + 35, 158, 520
+    box.Length, box.Width, box.Height = dim[1], dim[0], dim[2]
     box.Support, box.MapMode = doc.getObject('XY_Plane'), 'ObjectXY'
-    box.AttachmentOffset.Base = Vector(-275, -box.Width / 2, 135)
+    box.AttachmentOffset.Base = Vector(-box.Length / 2, -box.Width / 2, -dim[3])
     body.ViewObject.Visibility = False
     return body
 
 
-def Head(doc):
+def Head(doc, dim):
+    # see file:///C:\Projects\ACS\5axes\AcsStageModel\FreeCad\acsstage.pdf
     xy = doc.getObject('XY_Plane')
-    body = doc.addObject('PartDesign::Body', 'ZBase')
-    box = body.newObject('PartDesign::AdditiveBox', 'ZBox')
-    box.Length, box.Width, box.Height = 39 + 198 - 35, 158, 154
+    body = doc.addObject('PartDesign::Body', 'Head')
+    box = body.newObject('PartDesign::AdditiveBox', 'HBox')
+    box.Length, box.Width, box.Height = dim[5], dim[6], dim[7]
     box.Support, box.MapMode = xy, 'ObjectXY'
-    box.AttachmentOffset.Base = Vector(-198 + 35, -box.Width / 2, 135)
-    body.ViewObject.Visibility = False
-    cyl1 = body.newObject('PartDesign::AdditiveCylinder', 'GCylinder')
-    cyl1.Radius, cyl1.Height = 39, 80
+    box.AttachmentOffset.Base = Vector(-dim[5] + dim[4], -dim[6] / 2, dim[1] + dim[3])
+    cyl1 = body.newObject('PartDesign::AdditiveCylinder', 'HCylinder')
+    cyl1.Radius, cyl1.Height = dim[2], dim[3]
     cyl1.Support, cyl1.MapMode = xy, 'ObjectXY'
-    cyl1.AttachmentOffset.Base = Vector(0, 0, 55)
-    cyl2 = body.newObject('PartDesign::AdditiveCylinder', 'GCylinder')
-    cyl2.Radius, cyl2.Height = 50, 55
+    cyl1.AttachmentOffset.Base = Vector(0, 0, dim[1])
+    cyl2 = body.newObject('PartDesign::AdditiveCylinder', 'HCylinder1')
+    cyl2.Radius, cyl2.Height = dim[0], dim[1]
     cyl2.Support, cyl2.MapMode = xy, 'ObjectXY'
     cyl2.AttachmentOffset.Base = Vector(0, 0, 0)
+    cyl2.Refine = True
+    body.ViewObject.Visibility = False
     return body
 
 
-def Bed(doc):
+def Bed(doc, dim):
+    # see file:///C:\Projects\ACS\5axes\AcsStageModel\FreeCad\acsstage.pdf
     body = doc.addObject('PartDesign::Body', 'Bed')
     box1 = body.newObject('PartDesign::AdditiveBox', 'BBox1')
-    box1.Length, box1.Width, box1.Height = 750, 550, 250
+    box1.Length, box1.Width, box1.Height = dim[0], dim[1], dim[2]
     box1.Support, box1.MapMode = doc.getObject('XY_Plane'), 'ObjectXY'
-    box1.AttachmentOffset.Base = Vector(275 - 750, -275, -182 - 250)
-    body.ViewObject.Visibility = False
+    box1.AttachmentOffset.Base = Vector(dim[8] - dim[0], -dim[1] / 2, -dim[9] - dim[2])
     box2 = body.newObject('PartDesign::AdditiveBox', 'BBox2')
-    box2.Length, box2.Width, box2.Height = 200, 200, 182 + 135 + 520
+    box2.Length, box2.Width, box2.Height = dim[3], dim[4], dim[5]
     box2.Support, box2.MapMode = doc.getObject('XY_Plane'), 'ObjectXY'
-    box2.AttachmentOffset.Base = Vector(275 - 750, -box2.Width / 2, -182)
+    box2.AttachmentOffset.Base = Vector(dim[8] - dim[0], -dim[4] / 2, -dim[9])
+    box3 = body.newObject('PartDesign::AdditiveBox', 'BBox3')
+    box3.Length, box3.Width, box3.Height = dim[6], dim[4], dim[7]
+    box3.Support, box3.MapMode = doc.getObject('XY_Plane'), 'ObjectXY'
+    box3.AttachmentOffset.Base = Vector(dim[8] - dim[0], -dim[4] / 2, -dim[9] + dim[5] - dim[7])
+    box3.Refine = True
     body.ViewObject.Visibility = False
     return body
 
 
-def IndexerGroup(doc):
-    FreeCAD.Console.PrintMessage('>>>>Indexer Group Start\n')
-    indexer = Indexer(doc)
-    trace = Draft.makeWire([], closed=False, face=False)
+def Build(doc, g, b):
+    # create components
+    # see file:///C:\Projects\ACS\5axes\AcsStageModel\FreeCad\acsstage.pdf
+    indexer = Indexer(doc, (60, 25, g))
+    gimbal = Gimbal(doc, (278, 130, 25, 139, -25, 60, 19, 40, 50, g + 25, 49, 32.5, 20, 0))
+    gimbalframe = Gimbal(doc, (
+    318, 130, 25, 159, 0, 0, 20, 65, 0, g + 25 + 25, 49, 32.5, -20, math.sqrt(77 * 77 + 130 * 130 / 4.)))
+    gimbalframe.Label = 'GimbalFrame'
+    ybase = YBase(doc, (550, 130, 40, g + 25 + 25 + 40))
+    head = Head(doc, (50, 55, 39, 80, 39, 202, 158, 154))
+    # bed = Bed(doc, (750,550,250,200,200,837,112,158,720,275,102))
+    bed = Bed(doc, (750, 550, 250, 162, 158, 837, 312, 600, 275, g + 25 + 25 + 40))
+
+    # combine into mechanisms
+    trace = Draft.makeWire([Vector(0, 0, 0), Vector(0, 0, -g)], closed=False, face=False)
     trace.ViewObject.Visibility = False
     tracelink = Link(doc, trace, 'Trace_')
-    group = doc.addObject('App::DocumentObjectGroup', 'IndexerGroup')
-    group.Group = (indexer, tracelink)
-    group.ViewObject.Visibility = False
-    link = Link(doc, group, 'IndexerGroup_')
-    FreeCAD.Console.PrintMessage('>>>>Indexer Group End\n')
-    return (link, indexer, tracelink)
-
-
-def GimbalGroup(doc):
-    FreeCAD.Console.PrintMessage('>>>>Gimbal Group Start\n')
-    gimbal = Link(doc, Gimbal(doc), 'Gimbal_')
-    indexergroup, indexer, trace = IndexerGroup(doc)
-    scale = Link(doc, RotaryScale(doc, 'IndexerScale', 60), 'IndexerScale_')
-    scale.Placement = Placement(Vector(0, 0, -51.9), Vector(0, 0, 1), -90)
-    mark = Link(doc, Mark(doc, False), 'GimbalMark_', 2)
-    mark.Placement = Placement(Vector(27.5, 0, 0), Vector(1, 0, 0), 90)
-    mark.ElementList[0].Placement.Base = Vector(0, 0, 157.1)
-    mark.ElementList[1].Placement.Base = Vector(0, 0, -157.1)
-    group = doc.addObject('App::DocumentObjectGroup', 'GimbalGroup')
-    group.Group = (gimbal, indexergroup, scale, mark)
-    group.ViewObject.Visibility = False
-    link = Link(doc, group, 'GimbalGroup_')
-    link.Placement.Rotation.Axis = Vector(0, 1, 0)
-    FreeCAD.Console.PrintMessage('>>>>Gimbal Group End\n')
-    return (link, gimbal, indexergroup, indexer, trace)
-
-
-def YGroup(doc):
-    FreeCAD.Console.PrintMessage('>>>>Y Group Start\n')
-    frame = Link(doc, GimbalFrame(doc), 'GimbalFrame_')
-    scale = Link(doc, RotaryScale(doc, 'GimbalScale', 32.5), 'GimbalScale_', 2)
-    scale.Placement = Placement(Vector(0, 0, 0), Vector(1, 0, 0), 90)
-    scale.ElementList[0].Placement.Base = Vector(0, 0, 157.1)
-    scale.ElementList[1].Placement.Base = Vector(0, 0, -157.1)
-
-    gimbalgroup, gimbal, indexergroup, indexer, trace = GimbalGroup(doc)
-    group = doc.addObject('App::DocumentObjectGroup', 'YGroup')
-    link = Link(doc, group, 'YGroup_')
-    group.Group = (frame, gimbalgroup, scale)
-    group.ViewObject.Visibility = False
-    FreeCAD.Console.PrintMessage('>>>>Y Group End\n')
-    return (link, gimbalgroup, frame, gimbal, indexergroup, indexer, trace)
-
-
-def XGroup(doc):
-    FreeCAD.Console.PrintMessage('>>>>X Group Start\n')
-    ybase = Link(doc, YBase(doc), 'YBase_')
-    ygroup, gimbalgroup, frame, gimbal, indexergroup, indexer, trace = YGroup(doc)
-    group = doc.addObject('App::DocumentObjectGroup', 'XGroup')
-    link = Link(doc, group, 'XGroup_')
-    group.Group = (ybase, ygroup)
-    group.ViewObject.Visibility = False
-    FreeCAD.Console.PrintMessage('>>>>X Group End\n')
-    return (link, ygroup, gimbalgroup, ybase, frame, gimbal, indexergroup, indexer, trace)
-
-
-def ZGroup(doc):
-    FreeCAD.Console.PrintMessage('>>>>Z Group Start\n')
-    head = Link(doc, Head(doc), 'Head_')
-    beam = Draft.makeWire([Vector(0, 0, 0), Vector(0, 0, -52)])
+    indexergroup = LinkGroup(doc, (indexer, tracelink), 'IndexerGroup')
+    gimbalgroup = LinkGroup(doc, (gimbal, indexergroup), 'GimbalGroup')
+    gimbalgroup.Placement.Rotation.Axis = Vector(0, 1, 0)
+    ygroup = LinkGroup(doc, (gimbalframe, gimbalgroup), 'YGroup')
+    xgroup = LinkGroup(doc, (ybase, ygroup), 'XGroup')
+    beam = Draft.makeWire([Vector(0, 0, 0), Vector(0, 0, -b)])
     beam.ViewObject.Visibility = False
     beamlink = Link(doc, beam, 'Beam_')
-    group = doc.addObject('App::DocumentObjectGroup', 'ZGroup')
-    link = Link(doc, group, 'ZGroup_')
-    group.Group = (head, beamlink)
-    group.ViewObject.Visibility = False
-    FreeCAD.Console.PrintMessage('>>>>Z Group End\n')
-    return (link, head, beamlink)
+    zgroup = LinkGroup(doc, (head, beamlink), 'ZGroup')
+    machine = LinkGroup(doc, (bed, xgroup, zgroup), 'Machine')
 
-
-def BedGroup(doc):
-    FreeCAD.Console.PrintMessage('>>>>Bed Group Start\n')
-    xbase = Link(doc, XBase(doc), 'XBase_')
-    zbase = Link(doc, ZBase(doc), 'ZBase_')
-    bed = Link(doc, Bed(doc), 'Bed_')
-    group = doc.addObject('App::DocumentObjectGroup', 'BaseGroup')
-    link = Link(doc, group, 'BaseGroup_')
-    group.Group = (bed, xbase, zbase)
-    group.ViewObject.Visibility = False
-    FreeCAD.Console.PrintMessage('>>>>Bed Group End\n')
-    return (link, bed, xbase, zbase)
-
-
-def MachineGroup(doc):
-    FreeCAD.Console.PrintMessage('>>>>Machine Group Start\n')
-    bedgroup, bed, xbase, zbase = BedGroup(doc)
-    xgroup, ygroup, gimbalgroup, ybase, frame, gimbal, indexergroup, indexer, trace = XGroup(doc)
-    zgroup, head, beam = ZGroup(doc)
-    group = doc.addObject('App::DocumentObjectGroup', 'Machine')
-    link = Link(doc, group, 'Machine_')
-    group.Group = (bedgroup, xgroup, zgroup)
-    group.ViewObject.Visibility = False
-    FreeCAD.Console.PrintMessage('>>>>Machine Group End\n')
-    return (
-    link, bedgroup, xgroup, zgroup, ygroup, gimbalgroup, bed, xbase, ybase, zbase, frame, gimbal, indexergroup, indexer,
-    trace, head, beam)
+    # colorize
+    indexer.ViewObject.ShapeColor = (1.00, 0.83, 0.14)
+    gimbal.ViewObject.ShapeColor = (0.79, 1.00, 0.04)
+    head.ViewObject.ShapeColor = (84. / 255, 193. / 255, 1.)
+    ybase.ViewObject.ShapeColor = (1., 1., 127. / 255)
+    gimbalframe.ViewObject.ShapeColor = (1., 170. / 255, 1.)
+    trace.ViewObject.LineColor = (1., 0., 0.)
+    trace.ViewObject.PointColor = (1., 0., 0.)
+    beam.ViewObject.LineColor = (1., 1., 1.)
+    return (machine, xgroup, ygroup, zgroup, gimbalgroup, indexergroup, beamlink, tracelink)
 
 
 class Machine:
-    def __init__(self, doc):
+    def __init__(self, doc, axesinfo):
         FreeCAD.Console.PrintMessage('>>>>Machine Start\n')
         self.doc = doc
-        self.machine, self.xgroup, self.ygroup = None, None, None
-        self.machine, self.bedgroup, self.xgroup, self.zgroup, self.ygroup, self.gimbalgroup, self.bed, self.xbase, self.ybase, self.zbase, self.gframe, self.gimbal, self.indexergroup, self.indexer, self.trace, self.head, self.beam = MachineGroup(
-            doc)
+        self.beamlength = 52
+        self.g = 52  # distance between the center of table and B rotation axis
+        self.machine, self.xgroup, self.ygroup, self.zgroup, self.gimbalgroup, self.indexergroup, self.beam, self.trace = Build(
+            doc, self.g, self.beamlength)
         self.mg2l, self.ml2g, self.mvalid = Matrix(), Matrix(), True
         self.totrace, self.tracepoints = False, []
         self.dummytrace = [Vector(0, 0, -53), Vector(0, 0, -53.001)]
         self.trace.Points = self.dummytrace
         self.beamlength = -self.beam.LinkedObject.Points[1].z
+        self.axesinfo = axesinfo
         FreeCAD.Console.PrintMessage('>>>>Machine End\n')
 
     @property
@@ -357,10 +282,6 @@ class Machine:
         self.mg2l = self.ml2g.inverse()
         self.mvalid = True
         return self.mg2l
-
-    @property
-    def AxesInfo(self):
-        return (('X', -200, 200), ('Y', -200, 200), ('Z', 0, 350), ('B', -90, 90), ('C', -180, 180))
 
     @property
     def BeamLength(self):
@@ -373,29 +294,28 @@ class Machine:
             self.beam.LinkedObject.Points = [Vector(0, 0, 0), Vector(0, 0, -value)]
             self.doc.recompute()
 
-    # BeamLength = property(beamlength_get,beamlength_set)
     def BeamLengthSet(self, value):
         self.BeamLength = value
 
     @property
     def X(self):
-        return -self.xgroup.Placement.Base.x
+        return self.xgroup.Placement.Base.x
 
     @X.setter
     def X(self, value):
         if (value is not None) and (not np.isnan(value)) and (value != self.X):
-            self.xgroup.Placement.Base.x = -value
+            self.xgroup.Placement.Base.x = value
             self.xgroup.recompute()
             self.mvalid = False
 
     @property
     def Y(self):
-        return -self.ygroup.Placement.Base.y
+        return self.ygroup.Placement.Base.y
 
     @Y.setter
     def Y(self, value):
         if (value is not None) and (not np.isnan(value)) and (value != self.Y):
-            self.ygroup.Placement.Base.y = -value
+            self.ygroup.Placement.Base.y = value
             self.ygroup.recompute()
             self.mvalid = False
 
@@ -412,23 +332,23 @@ class Machine:
 
     @property
     def B(self):
-        return -self.gimbalgroup.Placement.Rotation.Angle / math.pi * 180
+        return self.gimbalgroup.Placement.Rotation.Angle / math.pi * 180
 
     @B.setter
     def B(self, value):
         if (value is not None) and (not np.isnan(value)) and (value != self.B):
-            self.gimbalgroup.Placement.Rotation.Angle = -value * math.pi / 180
+            self.gimbalgroup.Placement.Rotation.Angle = value * math.pi / 180
             self.gimbalgroup.recompute()
             self.mvalid = False
 
     @property
     def C(self):
-        return self.indexergroup.Placement.Rotation.Angle / math.pi * 180
+        return -self.indexergroup.Placement.Rotation.Angle / math.pi * 180
 
     @C.setter
     def C(self, value):
         if (value is not None) and (not np.isnan(value)) and (value != self.C):
-            self.indexergroup.Placement.Rotation.Angle = value * math.pi / 180
+            self.indexergroup.Placement.Rotation.Angle = -value * math.pi / 180
             self.indexergroup.recompute()
             self.mvalid = False
 
@@ -474,8 +394,9 @@ class Machine:
     def GetKinematicMatricesByMachine(self, b, c):
         b, c = b * math.pi / 180, c * math.pi / 180  # Convert to radians
         sb, cb, sc, cc = math.sin(b), math.cos(b), math.sin(c), math.cos(c)
+        # direct = np.array([[-cb*cc, cb*sc, -sb, 0], [-sc, -cc, 0, 0], [-sb*cc, sb*sc, cb, self.BeamLength], [0, 0, 0, 1]], dtype=float)
         direct = np.array(
-            [[-cb * cc, cb * sc, -sb, 0], [-sc, -cc, 0, 0], [-sb * cc, sb * sc, cb, self.BeamLength], [0, 0, 0, 1]],
+            [[cb * cc, cb * sc, -sb, 0], [-sc, cc, 0, 0], [sb * cc, sb * sc, cb, self.BeamLength], [0, 0, 0, 1]],
             dtype=float)
         feedback = np.array(
             [[-cb * cc, -sc, -sb * cc, self.BeamLength * sb * cc], [cb * sc, -cc, sb * sc, -self.BeamLength * sb * sc],
@@ -492,7 +413,6 @@ class MachineGui(QtGui.QMainWindow):
         self.initUI()
         self.run = False
         self.runAxes = [True, True, True, True, True]
-        self.runIncr = 0.2
         self.XYZBC = self.machine.XYZBC
         self.directory = '.'
 
@@ -500,7 +420,7 @@ class MachineGui(QtGui.QMainWindow):
         self.result = 'Cancelled'
         # define window		xLoc,yLoc,xDim,yDim
         self.setGeometry(10, 30, 250, 335)
-        self.setWindowTitle("ACS Stage v6")
+        self.setWindowTitle("ACS Stage v7")
         self.setWindowFlags(QtCore.Qt.WindowStaysOnTopHint)
         #		grid = QtGui.QGridLayout(self)
         self.beamlabel = QtGui.QLabel('Beam length', self)
@@ -509,7 +429,7 @@ class MachineGui(QtGui.QMainWindow):
         self.beambox.setGeometry(75, 5, 70, 20)
         self.beambox.textEdited.connect(lambda s: self.machine.BeamLengthSet(float(self.beambox.text())))
         self.labels, self.sliders, self.boxes, self.checks = [], [], [], []
-        for ax in self.machine.AxesInfo:
+        for ax in self.machine.axesinfo:
             i = len(self.labels)
             self.labels.append(QtGui.QLabel(ax[0], self))
             self.labels[i].setGeometry(15, 30 + 25 * i, 30, 20)
@@ -540,7 +460,8 @@ class MachineGui(QtGui.QMainWindow):
         self.rates.setGeometry(145, 210, 55, 20)
         self.rates.setMinimum(0)
         self.rates.setMaximum(100)
-        self.rates.valueChanged.connect(self.rateMove)
+        self.rates.setValue(100)
+        # self.rates.valueChanged.connect(self.rateMove)
         self.pstart = QtGui.QPushButton("Start", self)
         self.pstart.setGeometry(15, 230, 70, 30)
         self.pstart.clicked.connect(self.Execute)
@@ -615,9 +536,8 @@ class MachineGui(QtGui.QMainWindow):
         self.XYZBC = (0, 0, 0, 0, 0, None)
         self.machine.XYZBC = (0, 0, 0, 0, 0, None)
 
-    def rateMove(self):
-        self.runIncr = 0.2 + self.rates.value() * 0.01 * 1.8
-
+    # def rateMove(self):
+    # 	self.runIncr = 0.2+self.rates.value()*0.01*1.8
     def selectAxis(self):
         i = self.sender().tag
         self.runAxes[i] = self.checks[i].isChecked()
@@ -627,7 +547,8 @@ class MachineGui(QtGui.QMainWindow):
             incr = 1
         elif value >= max_:
             incr = -1
-        return (value + incr * self.runIncr, incr)
+        runIncr = 0.2 + self.rates.value() * 0.01 * 1.8
+        return (value + incr * runIncr, incr)
 
     def Animate(self):
         self.Run = not self.Run
@@ -635,7 +556,7 @@ class MachineGui(QtGui.QMainWindow):
         value = list(self.machine.XYZBC)
         incr = [1, 1, 1, 1, 1]
         while self.Run:
-            for i, a in zip(range(5), self.machine.AxesInfo):
+            for i, a in zip(range(5), self.machine.axesinfo):
                 if (self.runAxes[i]):
                     value[i], incr[i] = self.AnimationStep(value[i], incr[i], a[1], a[2])
             self.XYZBC = value
@@ -675,7 +596,7 @@ class MachineGui(QtGui.QMainWindow):
             return theta, phi
 
     def GetFixtureMatrices(self, offs):
-        g = 52
+        g = self.machine.g
         x, y, z, a, b, c = offs[0], offs[1], offs[2], offs[3] * math.pi / 180, offs[4] * math.pi / 180, offs[
             5] * math.pi / 180
         sa, ca, sb, cb, sc, cc = math.sin(a), math.cos(a), math.sin(b), math.cos(b), math.sin(c), math.cos(c)
@@ -704,10 +625,10 @@ class MachineGui(QtGui.QMainWindow):
                 desc = json.loads(row)
                 coor = desc['coordinates']
                 row = f.readline()
-                # if coor != 'machine':
+            if coor != 'machine':
                 flen = desc['focallength']
             else:
-                flen = 52
+                flen = self.machine.BeamLength
             res = self.lib.SetToolLength(flen)
             if (coor == 'part') or (coor == 'mixed'):
                 print(">>>>Part coordinates")
@@ -754,7 +675,7 @@ class MachineGui(QtGui.QMainWindow):
                     vprincipal = fixture @ np.array(
                         [vpart[0], vpart[1], vpart[2], 1.0])  # Multiplication fixture by xyz1 input vector
                     print('principal:', vprincipal)
-                    b, c = -vpart[3] - offs[4], vpart[4] - offs[5]  # B sign inversion
+                    b, c = vpart[3] - offs[4], vpart[4] - offs[5]
                     kinematic, fkinematic = self.machine.GetKinematicMatricesByMachine(b, c)
                     print('kinematic:', kinematic)
                     vmachine = kinematic @ vprincipal
@@ -778,7 +699,6 @@ class MachineGui(QtGui.QMainWindow):
                     vmachine[0] = -vmachine[0]
                     vmachine[1] = -vmachine[1]
                     vmachine[3] = -vmachine[3]
-                    vmachine[4] = -vmachine[4]
                     fpart = vpart
                 elif coor == 'machine_dll':
                     vmachine = vpart
@@ -792,11 +712,10 @@ class MachineGui(QtGui.QMainWindow):
                 self.XYZBC = vec
                 self.machine.XYZBC = vec
                 FreeCAD.Gui.updateGui()
-                time.sleep(0.01)
+                time.sleep(1 / max(1., self.rates.value()))
                 row = f.readline()
         self.Run = False
 
-import platform
 
 def InitDll():
     if platform.architecture()[0] == "32bit":
@@ -806,54 +725,35 @@ def InitDll():
     lib.SetFixtureOffsets.restype = ctypes.c_int
     lib.SetFixtureOffsets.argtypes = [ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_double,
                                       ctypes.c_double, ctypes.c_double]
-    # res = lib.SetFixtureOffsets(0, 0, 0, 0, 0, 0)
     lib.DoDirectTransform.restype = ctypes.c_int
     lib.DoDirectTransform.argtypes = [ctypes.c_int, np.ctypeslib.ndpointer(dtype=np.float64), ctypes.c_int,
                                       np.ctypeslib.ndpointer(dtype=np.float64)]
-    # mixed = np.array([1, 1, 1, 0, 0], np.float64)
-    # machine = np.array([0, 0, 0, 0, 0], np.float64)
-    # res = lib.DoDirectTransform(len(mixed), mixed, len(machine), machine)
     lib.DoFeedbackTransform.restype = ctypes.c_int
     lib.DoFeedbackTransform.argtypes = [ctypes.c_int, np.ctypeslib.ndpointer(dtype=np.float64), ctypes.c_int,
                                         np.ctypeslib.ndpointer(dtype=np.float64)]
-    # mixed1 = np.array([0, 0, 0, 0, 0], np.float64)
-    # res = lib.DoFeedbackTransform(len(machine), machine, len(mixed1), mixed1)
     lib.SetToolLength.restype = ctypes.c_int
     lib.SetToolLength.argtypes = [ctypes.c_double]
-    # res = lib.SetToolLength(70)
     lib.SetToolRadius.restype = ctypes.c_int
     lib.SetToolRadius.argtypes = [ctypes.c_double]
-    # res = lib.SetToolRadius(5)
     lib.IsFeedbackKinematicsSupported.restype = ctypes.c_int
     lib.IsFeedbackKinematicsSupported.argtypes = [np.ctypeslib.ndpointer(dtype=np.int32)]
     r = np.array([0], np.int32)
-    # res = lib.IsFeedbackKinematicsSupported(r)
     lib.GetStageModelInd.restype = ctypes.c_int
     lib.GetStageModelInd.argtypes = [np.ctypeslib.ndpointer(dtype=np.int32)]
-    # res = lib.GetStageModelInd(r)
     lib.SetCoordinatesFormat.restype = ctypes.c_int
     lib.SetCoordinatesFormat.argtypes = [ctypes.c_int]
-    # res = lib.SetCoordinatesFormat(1)
     lib.GetRotAxesModel.restype = ctypes.c_int
     lib.GetRotAxesModel.argtypes = [np.ctypeslib.ndpointer(dtype=np.int32)]
-    # res = lib.GetRotAxesModel(r)
     return lib
 
 
 lib = InitDll()
 doc = App.newDocument('AcsStage')
-machine = Machine(doc)
+axesinfo = (('X', -200, 200), ('Y', -200, 200), ('Z', 0, 350), ('B', -90, 90), ('C', -180, 180))  # motion limits
+machine = Machine(doc, axesinfo)
 doc.recompute()
 Gui.SendMsgToActiveView("ViewFit")
 Gui.activeDocument().activeView().viewIsometric()
-machine.indexer.ViewObject.ShapeColor = (1.00, 0.83, 0.14)
-machine.gimbal.ViewObject.ShapeColor = (0.79, 1.00, 0.04)
-machine.head.ViewObject.ShapeColor = (84. / 255, 193. / 255, 1.)
-machine.ybase.ViewObject.ShapeColor = (1., 1., 127. / 255)
-machine.gframe.ViewObject.ShapeColor = (1., 170. / 255, 1.)
-machine.trace.ViewObject.LineColor = (1., 0., 0.)
-machine.trace.ViewObject.PointColor = (1., 0., 0.)
-machine.beam.ViewObject.LineColor = (1., 1., 1.)
 FreeCAD.Gui.updateGui()
 mw = FreeCADGui.getMainWindow()
 ev = QtGui.QKeyEvent(QtCore.QEvent.KeyPress, QtCore.Qt.Key_F11, QtCore.Qt.NoModifier)
