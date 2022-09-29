@@ -1,6 +1,5 @@
 import math, time
 import platform
-#from platform import machine
 import Part, Sketcher, Draft
 from FreeCAD import Vector, Matrix, Placement
 from PySide import QtGui, QtCore
@@ -45,6 +44,30 @@ def RotaryScale(doc, name, radius):
     sketch.ViewObject.LineWidth, sketch.ViewObject.PointSize = 2, 2
     sketch.ViewObject.Visibility = True
     return sketch
+
+
+def Workpiece(doc, dim):
+    # see file:///C:\Projects\ACS\5axes\AcsStageModel\FreeCad\workpiece.pdf
+    body = doc.addObject('PartDesign::Body', 'Workpiece')
+    xy = doc.getObject('XY_Plane')
+    cyl1 = body.newObject('PartDesign::AdditiveCylinder', 'PCylinder1')
+    cyl1.Radius, cyl1.Height = dim[3], dim[4]
+    cyl1.Support, cyl1.MapMode = xy, 'ObjectXY'
+    cyl1.AttachmentOffset.Base = Vector(0, 0, -dim[0])
+    cyl2 = body.newObject('PartDesign::AdditiveCylinder', 'PCylinder2')
+    cyl2.Radius, cyl2.Height = dim[5], dim[6]
+    cyl2.Support, cyl2.MapMode = xy, 'ObjectXY'
+    cyl2.AttachmentOffset.Base = Vector(0, 0, -dim[0] + dim[4])
+    cyl3 = body.newObject('PartDesign::AdditiveCylinder', 'PCylinder3')
+    cyl3.Radius, cyl3.Height = dim[7], dim[1] - dim[2] - dim[4] - dim[6]
+    cyl3.Support, cyl3.MapMode = xy, 'ObjectXY'
+    cyl3.AttachmentOffset.Base = Vector(0, 0, -dim[0] + dim[4] + dim[6])
+    sph = body.newObject('PartDesign::AdditiveSphere', 'PSphere')
+    sph.Radius, sph.Angle1 = dim[2], 0
+    sph.Support, sph.MapMode = xy, 'ObjectXY'
+    sph.AttachmentOffset.Base = Vector(0, 0, -dim[0] + dim[1] - dim[2])
+    body.ViewObject.Visibility = False
+    return body
 
 
 def Indexer(doc, dim):
@@ -221,6 +244,8 @@ def Bed(doc, dim):
 
 def Build(doc, g, b):
     # create components
+    # see file:///C:\Projects\ACS\5axes\AcsStageModel\FreeCad\workpiece.pdf
+    workpiece = Workpiece(doc, (52, 70.91708, 40 - 1.9, 25, 2.5, 40, 7.5, 22))
     # see file:///C:\Projects\ACS\5axes\AcsStageModel\FreeCad\acsstage.pdf
     indexer = Indexer(doc, (60, 25, g))
     gimbal = Gimbal(doc, (278, 130, 25, 139, -25, 60, 19, 40, 50, g + 25, 49, 32.5, 20, 0))
@@ -236,7 +261,8 @@ def Build(doc, g, b):
     trace = Draft.makeWire([Vector(0, 0, 0), Vector(0, 0, -g)], closed=False, face=False)
     trace.ViewObject.Visibility = False
     tracelink = Link(doc, trace, 'Trace_')
-    indexergroup = LinkGroup(doc, (indexer, tracelink), 'IndexerGroup')
+    workpiecegroup = LinkGroup(doc, (workpiece), 'WorkpieceGroup')
+    indexergroup = LinkGroup(doc, (indexer, workpiecegroup, tracelink), 'IndexerGroup')
     gimbalgroup = LinkGroup(doc, (gimbal, indexergroup), 'GimbalGroup')
     gimbalgroup.Placement.Rotation.Axis = Vector(0, 1, 0)
     ygroup = LinkGroup(doc, (gimbalframe, gimbalgroup), 'YGroup')
@@ -256,7 +282,7 @@ def Build(doc, g, b):
     trace.ViewObject.LineColor = (1., 0., 0.)
     trace.ViewObject.PointColor = (1., 0., 0.)
     beam.ViewObject.LineColor = (1., 1., 1.)
-    return (machine, xgroup, ygroup, zgroup, gimbalgroup, indexergroup, beamlink, tracelink)
+    return (machine, xgroup, ygroup, zgroup, gimbalgroup, indexergroup, beamlink, tracelink, workpiecegroup)
 
 
 class Machine:
@@ -265,7 +291,7 @@ class Machine:
         self.doc = doc
         self.beamlength = 52
         self.g = 52  # distance between the center of table and B rotation axis
-        self.machine, self.xgroup, self.ygroup, self.zgroup, self.gimbalgroup, self.indexergroup, self.beam, self.trace = Build(
+        self.machine, self.xgroup, self.ygroup, self.zgroup, self.gimbalgroup, self.indexergroup, self.beam, self.trace, self.workpiece = Build(
             doc, self.g, self.beamlength)
         self.mg2l, self.ml2g, self.mvalid = Matrix(), Matrix(), True
         self.totrace, self.tracepoints = False, []
@@ -371,6 +397,10 @@ class Machine:
         self.doc.recompute()
 
     #		self.trace.ViewObject.Visibility = False
+    def setWorkpiece(self, value):
+        self.workpiece.ViewObject.LinkVisibility = value
+        self.workpiece.ViewObject.Visibility = False
+
     def Trace(self):
         v = self.G2L.multiply(Vector(0, 0, self.Z - self.beamlength))
         self.tracepoints.append(v)
@@ -419,8 +449,8 @@ class MachineGui(QtGui.QMainWindow):
     def initUI(self):
         self.result = 'Cancelled'
         # define window		xLoc,yLoc,xDim,yDim
-        self.setGeometry(10, 30, 250, 335)
-        self.setWindowTitle("ACS Stage v7")
+        self.setGeometry(10, 30, 250, 355)
+        self.setWindowTitle("ACS Stage v.1.0")
         self.setWindowFlags(QtCore.Qt.WindowStaysOnTopHint)
         #		grid = QtGui.QGridLayout(self)
         self.beamlabel = QtGui.QLabel('Beam length', self)
@@ -476,10 +506,14 @@ class MachineGui(QtGui.QMainWindow):
         self.cleartrace = QtGui.QPushButton("Clear trace", self)
         self.cleartrace.setGeometry(65, 265, 70, 20)
         self.cleartrace.clicked.connect(lambda s: self.machine.resetTrace())
+        self.workpiece = QtGui.QCheckBox('Workpiece', self)
+        self.workpiece.setGeometry(15, 285, 80, 20)
+        self.workpiece.setChecked(True)
+        self.workpiece.stateChanged.connect(lambda s: self.machine.setWorkpiece(self.workpiece.isChecked()))
         self.usedll = QtGui.QCheckBox('Use DLL', self)
-        self.usedll.setGeometry(15, 285, 50, 20)
+        self.usedll.setGeometry(15, 305, 80, 20)
         self.bclose = QtGui.QPushButton("Close", self)
-        self.bclose.setGeometry(190, 305, 50, 20)
+        self.bclose.setGeometry(190, 325, 50, 20)
         self.bclose.clicked.connect(lambda s: self.close())
         self.show()
 
