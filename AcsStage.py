@@ -245,7 +245,7 @@ def Bed(doc, dim):
 def Build(doc, g, b):
     # create components
     # see file:///C:\Projects\ACS\5axes\AcsStageModel\FreeCad\workpiece.pdf
-    workpiece = Workpiece(doc, (52, 70.91708, 40 - 1.9, 25, 2.5, 40, 7.5, 22))
+    workpiece = Workpiece(doc, (52, 70.91708, 40 - 2, 25, 2.5, 40, 7.5, 22))
     # see file:///C:\Projects\ACS\5axes\AcsStageModel\FreeCad\acsstage.pdf
     indexer = Indexer(doc, (60, 25, g))
     gimbal = Gimbal(doc, (278, 130, 25, 139, -25, 60, 19, 40, 50, g + 25, 49, 32.5, 20, 0))
@@ -428,8 +428,9 @@ class Machine:
         direct = np.array(
             [[cb * cc, cb * sc, -sb, 0], [-sc, cc, 0, 0], [sb * cc, sb * sc, cb, self.BeamLength], [0, 0, 0, 1]],
             dtype=float)
+        # feedback = np.array([[-cb*cc, -sc, -sb*cc, self.BeamLength*sb*cc], [cb*sc, -cc, sb*sc, -self.BeamLength*sb*sc], [-sb, 0, cb, -self.BeamLength*cb], [0, 0, 0, 1]], dtype=float)
         feedback = np.array(
-            [[-cb * cc, -sc, -sb * cc, self.BeamLength * sb * cc], [cb * sc, -cc, sb * sc, -self.BeamLength * sb * sc],
+            [[cb * cc, -sc, sb * cc, -self.BeamLength * sb * cc], [cb * sc, cc, sb * sc, -self.BeamLength * sb * sc],
              [-sb, 0, cb, -self.BeamLength * cb], [0, 0, 0, 1]], dtype=float)
         return direct, feedback
 
@@ -450,7 +451,7 @@ class MachineGui(QtGui.QMainWindow):
         self.result = 'Cancelled'
         # define window		xLoc,yLoc,xDim,yDim
         self.setGeometry(10, 30, 250, 355)
-        self.setWindowTitle("ACS Stage v.1.0")
+        self.setWindowTitle("ACS Stage v.10")
         self.setWindowFlags(QtCore.Qt.WindowStaysOnTopHint)
         #		grid = QtGui.QGridLayout(self)
         self.beamlabel = QtGui.QLabel('Beam length', self)
@@ -515,6 +516,7 @@ class MachineGui(QtGui.QMainWindow):
         self.bclose = QtGui.QPushButton("Close", self)
         self.bclose.setGeometry(190, 325, 50, 20)
         self.bclose.clicked.connect(lambda s: self.close())
+        self.ZeroAll()
         self.show()
 
     def closeEvent(self, event):
@@ -567,8 +569,8 @@ class MachineGui(QtGui.QMainWindow):
         self.pstart.setStyleSheet('color: red;' if self.run else 'color: black;')
 
     def ZeroAll(self):
-        self.XYZBC = (0, 0, 0, 0, 0, None)
-        self.machine.XYZBC = (0, 0, 0, 0, 0, None)
+        self.XYZBC = (0, 0, self.machine.beamlength if self.workpiece.isChecked() else 0, 0, 0, None)
+        self.machine.XYZBC = (0, 0, self.machine.beamlength if self.workpiece.isChecked() else 0, 0, 0, None)
 
     # def rateMove(self):
     # 	self.runIncr = 0.2+self.rates.value()*0.01*1.8
@@ -678,16 +680,17 @@ class MachineGui(QtGui.QMainWindow):
             while row:
                 if not self.Run: return
                 els = row.replace(',', '\t').split('\t')
+                if (len(els) < 5): break
                 elsnp = np.array(els, dtype=float)
                 if (len(elsnp) > 5):
                     flen = elsnp[5]  # Receives length from the GUI window
                     res = self.lib.SetToolLength(flen)
                 vpart = np.append(elsnp[:5], 1.0)  # Switches the input vector to homogenous form -> vpart
-                print('vpart:', vpart)
+                # print('vpart:', vpart)
                 vprincipal, vmachine = vpart, vpart  # Initialization of vprincipal, vmachine homogenous vectors
                 if coor == 'part':
                     dx, dy, dz = self.Spherical2projections(vpart[3:5])
-                    print('dx/dy/dz:', dx, dy, dz)
+                    # print('dx/dy/dz:', dx, dy, dz)
                     t = fixture @ np.array([[vpart[0], dx], [vpart[1], dy], [vpart[2], dz], [1.0, 0.0]])
                     theta, phi = self.Projections2spherical(t[:3, 1], np.NaN if principal1 is None else principal1[4])
                     vprincipal = np.append(t[:3, 0], [theta, phi, 1.0])
@@ -708,15 +711,15 @@ class MachineGui(QtGui.QMainWindow):
                     # calculate in python
                     vprincipal = fixture @ np.array(
                         [vpart[0], vpart[1], vpart[2], 1.0])  # Multiplication fixture by xyz1 input vector
-                    print('principal:', vprincipal)
+                    # print('principal:', vprincipal)
                     b, c = vpart[3] - offs[4], vpart[4] - offs[5]
                     kinematic, fkinematic = self.machine.GetKinematicMatricesByMachine(b, c)
-                    print('kinematic:', kinematic)
+                    # print('kinematic:', kinematic)
                     vmachine = kinematic @ vprincipal
                     fprincipal = fkinematic @ vmachine
                     fpart = ffixture @ fprincipal
                     vmachine = np.append(vmachine[:3], [b, c, 1.0])
-                    print('vmachine:', vmachine)
+                    # print('vmachine:', vmachine)
                     fprincipal = np.append(fprincipal[:3], [vpart[3], vpart[4], 1.0])
                     fpart = np.append(fpart[:3], [vpart[3], vpart[4], 1.0])
                     # calculate in dll
@@ -738,11 +741,12 @@ class MachineGui(QtGui.QMainWindow):
                     vmachine = vpart
                     fpart = vpart
                 dvec = vpart - fpart
+                # print('vpart:', vpart)
                 # print('fpart:', fpart)
                 # print('difference:', dvec)
-                # if any(d > 1.e-6 for d in dvec): print('@@@@@@@@@@@@@@@@@@@@@@@@@@')
+                if any(d > 1.e-6 for d in dvec): print('@@@@@@@@@@@@@@@@@@@@@@@@@@')
                 vec = np.append(vmachine[:5], flen)
-                print('flen:', flen)
+                # print('flen:', flen)
                 self.XYZBC = vec
                 self.machine.XYZBC = vec
                 FreeCAD.Gui.updateGui()
@@ -794,6 +798,3 @@ ev = QtGui.QKeyEvent(QtCore.QEvent.KeyPress, QtCore.Qt.Key_F11, QtCore.Qt.NoModi
 QtGui.QApplication.sendEvent(mw, ev)
 mw.showMinimized()
 gui = MachineGui(machine, lib)
-
-
-
