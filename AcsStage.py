@@ -245,7 +245,7 @@ def Bed(doc, dim):
 def Build(doc, g, b):
     # create components
     # see file:///C:\Projects\ACS\5axes\AcsStageModel\FreeCad\workpiece.pdf
-    workpiece = Workpiece(doc, (52, 70.91708, 40 - 2, 25, 2.5, 40, 7.5, 22))
+    workpiece = Workpiece(doc, (52, 70.91708, 38, 20, 2.5, 40, 7.5, 22))
     # see file:///C:\Projects\ACS\5axes\AcsStageModel\FreeCad\acsstage.pdf
     indexer = Indexer(doc, (60, 25, g))
     gimbal = Gimbal(doc, (278, 130, 25, 139, -25, 60, 19, 40, 50, g + 25, 49, 32.5, 20, 0))
@@ -569,8 +569,10 @@ class MachineGui(QtGui.QMainWindow):
         self.pstart.setStyleSheet('color: red;' if self.run else 'color: black;')
 
     def ZeroAll(self):
-        self.XYZBC = (0, 0, self.machine.beamlength if self.workpiece.isChecked() else 0, 0, 0, None)
-        self.machine.XYZBC = (0, 0, self.machine.beamlength if self.workpiece.isChecked() else 0, 0, 0, None)
+        WP_Height = 70.9
+        Z0 = (WP_Height - self.machine.g + self.machine.beamlength) if self.workpiece.isChecked() else 0
+        self.XYZBC = (0, 0, Z0, 0, 0, None)
+        self.machine.XYZBC = (0, 0, Z0, 0, 0, None)
 
     # def rateMove(self):
     # 	self.runIncr = 0.2+self.rates.value()*0.01*1.8
@@ -665,13 +667,15 @@ class MachineGui(QtGui.QMainWindow):
                 flen = desc['focallength']
             else:
                 flen = self.machine.BeamLength
-            res = self.lib.SetToolLength(flen)
+            if self.lib is not "":
+                res = self.lib.SetToolLength(flen)
             if (coor == 'part') or (coor == 'mixed'):
                 print(">>>>Part coordinates")
                 offs = desc['offsets']
                 print('offsets:', offs)
                 fixture, ffixture = self.GetFixtureMatrices(offs)
-                self.lib.SetFixtureOffsets(offs[0], offs[1], offs[2], offs[3], offs[4], offs[5])
+                if self.lib is not "":
+                    self.lib.SetFixtureOffsets(offs[0], offs[1], offs[2], offs[3], offs[4], offs[5])
                 print('fixture:', fixture)
                 print('ffixture:', ffixture)
                 print('verify:', fixture @ ffixture)
@@ -683,8 +687,9 @@ class MachineGui(QtGui.QMainWindow):
                 if (len(els) < 5): break
                 elsnp = np.array(els, dtype=float)
                 if (len(elsnp) > 5):
-                    flen = elsnp[5]  # Receives length from the GUI window
-                    res = self.lib.SetToolLength(flen)
+                    flen = elsnp[5]  # Receives length from the GUI window\
+                    if self.lib is not "":
+                        res = self.lib.SetToolLength(flen)
                 vpart = np.append(elsnp[:5], 1.0)  # Switches the input vector to homogenous form -> vpart
                 # print('vpart:', vpart)
                 vprincipal, vmachine = vpart, vpart  # Initialization of vprincipal, vmachine homogenous vectors
@@ -722,15 +727,16 @@ class MachineGui(QtGui.QMainWindow):
                     # print('vmachine:', vmachine)
                     fprincipal = np.append(fprincipal[:3], [vpart[3], vpart[4], 1.0])
                     fpart = np.append(fpart[:3], [vpart[3], vpart[4], 1.0])
-                    # calculate in dll
-                    mixed_dll = np.array(vpart[:5], np.float64)
-                    machine_dll = np.array([0, 0, 0, 0, 0], np.float64)
-                    res = self.lib.DoDirectTransform(5, mixed_dll, 5, machine_dll)
-                    feedback_dll = np.array([0, 0, 0, 0, 0], np.float64)
-                    res = self.lib.DoFeedbackTransform(5, machine_dll, 5, feedback_dll)
-                    if self.usedll.isChecked():
-                        vmachine = np.append(machine_dll, 1.0)
-                        fpart = np.append(feedback_dll, 1.0)
+                    if self.lib is not "":
+                        # calculate in dll
+                        mixed_dll = np.array(vpart[:5], np.float64)
+                        machine_dll = np.array([0, 0, 0, 0, 0], np.float64)
+                        res = self.lib.DoDirectTransform(5, mixed_dll, 5, machine_dll)
+                        feedback_dll = np.array([0, 0, 0, 0, 0], np.float64)
+                        res = self.lib.DoFeedbackTransform(5, machine_dll, 5, feedback_dll)
+                        if self.usedll.isChecked():
+                            vmachine = np.append(machine_dll, 1.0)
+                            fpart = np.append(feedback_dll, 1.0)
                 elif coor == 'machine':
                     vmachine = vpart
                     vmachine[0] = -vmachine[0]
@@ -785,7 +791,11 @@ def InitDll():
     return lib
 
 
-lib = InitDll()
+try:
+    lib = InitDll()
+except Exception as ex:
+    lib = ""
+    print('dll is not available')
 doc = App.newDocument('AcsStage')
 axesinfo = (('X', -200, 200), ('Y', -200, 200), ('Z', 0, 350), ('B', -90, 90), ('C', -180, 180))  # motion limits
 machine = Machine(doc, axesinfo)
