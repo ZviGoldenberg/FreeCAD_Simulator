@@ -245,7 +245,7 @@ def Bed(doc, dim):
 def Build(doc, g, b):
     # create components
     # see file:///C:\Projects\ACS\5axes\AcsStageModel\FreeCad\workpiece.pdf
-    workpiece = Workpiece(doc, (52, 70.91708, 38, 20, 2.5, 40, 7.5, 22))
+    workpiece = Workpiece(doc, (52, 70.91708, 36, 20, 2.5, 40, 7.5, 22))
     # see file:///C:\Projects\ACS\5axes\AcsStageModel\FreeCad\acsstage.pdf
     indexer = Indexer(doc, (60, 25, g))
     gimbal = Gimbal(doc, (278, 130, 25, 139, -25, 60, 19, 40, 50, g + 25, 49, 32.5, 20, 0))
@@ -325,23 +325,23 @@ class Machine:
 
     @property
     def X(self):
-        return self.xgroup.Placement.Base.x
+        return -self.xgroup.Placement.Base.x
 
     @X.setter
     def X(self, value):
         if (value is not None) and (not np.isnan(value)) and (value != self.X):
-            self.xgroup.Placement.Base.x = value
+            self.xgroup.Placement.Base.x = -value
             self.xgroup.recompute()
             self.mvalid = False
 
     @property
     def Y(self):
-        return self.ygroup.Placement.Base.y
+        return -self.ygroup.Placement.Base.y
 
     @Y.setter
     def Y(self, value):
         if (value is not None) and (not np.isnan(value)) and (value != self.Y):
-            self.ygroup.Placement.Base.y = value
+            self.ygroup.Placement.Base.y = -value
             self.ygroup.recompute()
             self.mvalid = False
 
@@ -358,23 +358,23 @@ class Machine:
 
     @property
     def B(self):
-        return self.gimbalgroup.Placement.Rotation.Angle / math.pi * 180
+        return -self.gimbalgroup.Placement.Rotation.Angle / math.pi * 180
 
     @B.setter
     def B(self, value):
         if (value is not None) and (not np.isnan(value)) and (value != self.B):
-            self.gimbalgroup.Placement.Rotation.Angle = value * math.pi / 180
+            self.gimbalgroup.Placement.Rotation.Angle = -value * math.pi / 180
             self.gimbalgroup.recompute()
             self.mvalid = False
 
     @property
     def C(self):
-        return -self.indexergroup.Placement.Rotation.Angle / math.pi * 180
+        return self.indexergroup.Placement.Rotation.Angle / math.pi * 180
 
     @C.setter
     def C(self, value):
         if (value is not None) and (not np.isnan(value)) and (value != self.C):
-            self.indexergroup.Placement.Rotation.Angle = -value * math.pi / 180
+            self.indexergroup.Placement.Rotation.Angle = value * math.pi / 180
             self.indexergroup.recompute()
             self.mvalid = False
 
@@ -425,9 +425,7 @@ class Machine:
         b, c = b * math.pi / 180, c * math.pi / 180  # Convert to radians
         sb, cb, sc, cc = math.sin(b), math.cos(b), math.sin(c), math.cos(c)
         # direct = np.array([[-cb*cc, cb*sc, -sb, 0], [-sc, -cc, 0, 0], [-sb*cc, sb*sc, cb, self.BeamLength], [0, 0, 0, 1]], dtype=float)
-        direct = np.array(
-            [[cb * cc, cb * sc, -sb, 0], [-sc, cc, 0, 0], [sb * cc, sb * sc, cb, self.BeamLength], [0, 0, 0, 1]],
-            dtype=float)
+        direct = np.array([[cb * cc, cb * sc, -sb, 0], [-sc, cc, 0, 0], [sb * cc, sb * sc, cb, self.BeamLength], [0, 0, 0, 1]], dtype=float)
         # feedback = np.array([[-cb*cc, -sc, -sb*cc, self.BeamLength*sb*cc], [cb*sc, -cc, sb*sc, -self.BeamLength*sb*sc], [-sb, 0, cb, -self.BeamLength*cb], [0, 0, 0, 1]], dtype=float)
         feedback = np.array(
             [[cb * cc, -sc, sb * cc, -self.BeamLength * sb * cc], [cb * sc, cc, sb * sc, -self.BeamLength * sb * sc],
@@ -503,6 +501,8 @@ class MachineGui(QtGui.QMainWindow):
         self.pbrowse.clicked.connect(self.FileSelect)
         self.trace = QtGui.QCheckBox('Trace', self)
         self.trace.setGeometry(15, 265, 50, 20)
+        self.trace.setChecked(True)
+        self.machine.setTrace(True)
         self.trace.stateChanged.connect(lambda s: self.machine.setTrace(self.trace.isChecked()))
         self.cleartrace = QtGui.QPushButton("Clear trace", self)
         self.cleartrace.setGeometry(65, 265, 70, 20)
@@ -513,6 +513,10 @@ class MachineGui(QtGui.QMainWindow):
         self.workpiece.stateChanged.connect(lambda s: self.machine.setWorkpiece(self.workpiece.isChecked()))
         self.usedll = QtGui.QCheckBox('Use DLL', self)
         self.usedll.setGeometry(15, 305, 80, 20)
+        if self.lib is not "":
+            self.usedll.setChecked(False)
+        else:
+            self.usedll.setEnabled(False)
         self.bclose = QtGui.QPushButton("Close", self)
         self.bclose.setGeometry(190, 325, 50, 20)
         self.bclose.clicked.connect(lambda s: self.close())
@@ -667,20 +671,21 @@ class MachineGui(QtGui.QMainWindow):
                 flen = desc['focallength']
             else:
                 flen = self.machine.BeamLength
-            if self.lib is not "":
-                res = self.lib.SetToolLength(flen)
             if (coor == 'part') or (coor == 'mixed'):
                 print(">>>>Part coordinates")
                 offs = desc['offsets']
                 print('offsets:', offs)
                 fixture, ffixture = self.GetFixtureMatrices(offs)
-                if self.lib is not "":
-                    self.lib.SetFixtureOffsets(offs[0], offs[1], offs[2], offs[3], offs[4], offs[5])
-                print('fixture:', fixture)
-                print('ffixture:', ffixture)
+                print('fixture:')
+                print(fixture)
+                print('ffixture:')
+                print(ffixture)
                 print('verify:', fixture @ ffixture)
-                # input()
+                print('Beam length: ', flen)
                 self.machine.BeamLength = flen
+                if self.usedll.isChecked():
+                    self.lib.SetFixtureOffsets(offs[0], offs[1], offs[2], offs[3], offs[4], offs[5])
+                    self.lib.SetToolLength(flen)
             while row:
                 if not self.Run: return
                 els = row.replace(',', '\t').split('\t')
@@ -688,8 +693,6 @@ class MachineGui(QtGui.QMainWindow):
                 elsnp = np.array(els, dtype=float)
                 if (len(elsnp) > 5):
                     flen = elsnp[5]  # Receives length from the GUI window\
-                    if self.lib is not "":
-                        res = self.lib.SetToolLength(flen)
                 vpart = np.append(elsnp[:5], 1.0)  # Switches the input vector to homogenous form -> vpart
                 # print('vpart:', vpart)
                 vprincipal, vmachine = vpart, vpart  # Initialization of vprincipal, vmachine homogenous vectors
@@ -713,30 +716,36 @@ class MachineGui(QtGui.QMainWindow):
                     fprincipal = fkinematic @ vmachine
                     fpart = fprincipal
                 elif coor == 'mixed':
-                    # calculate in python
-                    vprincipal = fixture @ np.array(
-                        [vpart[0], vpart[1], vpart[2], 1.0])  # Multiplication fixture by xyz1 input vector
-                    # print('principal:', vprincipal)
-                    b, c = vpart[3] - offs[4], vpart[4] - offs[5]
-                    kinematic, fkinematic = self.machine.GetKinematicMatricesByMachine(b, c)
-                    # print('kinematic:', kinematic)
-                    vmachine = kinematic @ vprincipal
-                    fprincipal = fkinematic @ vmachine
-                    fpart = ffixture @ fprincipal
-                    vmachine = np.append(vmachine[:3], [b, c, 1.0])
-                    # print('vmachine:', vmachine)
-                    fprincipal = np.append(fprincipal[:3], [vpart[3], vpart[4], 1.0])
-                    fpart = np.append(fpart[:3], [vpart[3], vpart[4], 1.0])
-                    if self.lib is not "":
+                    if self.usedll.isChecked():
                         # calculate in dll
                         mixed_dll = np.array(vpart[:5], np.float64)
                         machine_dll = np.array([0, 0, 0, 0, 0], np.float64)
                         res = self.lib.DoDirectTransform(5, mixed_dll, 5, machine_dll)
                         feedback_dll = np.array([0, 0, 0, 0, 0], np.float64)
                         res = self.lib.DoFeedbackTransform(5, machine_dll, 5, feedback_dll)
-                        if self.usedll.isChecked():
-                            vmachine = np.append(machine_dll, 1.0)
-                            fpart = np.append(feedback_dll, 1.0)
+                        vmachine = np.append(machine_dll, 1.0)
+                        fpart = np.append(feedback_dll, 1.0)
+                    else:
+                        # calculate in python
+                        vprincipal = fixture @ np.array(
+                            [vpart[0], vpart[1], vpart[2], 1.0])  # Multiplication fixture by xyz1 input vector
+                        print('principal:', vprincipal)
+                        b, c = vpart[3] - offs[4], vpart[4] - offs[5]
+                        kinematic, fkinematic = self.machine.GetKinematicMatricesByMachine(b, c)
+                        print('kinematic:', kinematic)
+                        vmachine = kinematic @ vprincipal
+                        print('vmachine:', vmachine)
+                        # Feedback transformations
+                        fprincipal = fkinematic @ vmachine
+                        fpart = ffixture @ fprincipal
+                        vmachine = np.append(vmachine[:3], [b, c, 1.0])
+                        # print('vmachine:', vmachine)
+                        fprincipal = np.append(fprincipal[:3], [vpart[3], vpart[4], 1.0])
+                        fpart = np.append(fpart[:3], [vpart[3], vpart[4], 1.0])
+                        vmachine[0] = -vmachine[0]
+                        vmachine[1] = -vmachine[1]
+                        vmachine[3] = -vmachine[3]
+                        vmachine[4] = -vmachine[4]
                 elif coor == 'machine':
                     vmachine = vpart
                     vmachine[0] = -vmachine[0]
@@ -756,7 +765,7 @@ class MachineGui(QtGui.QMainWindow):
                 self.XYZBC = vec
                 self.machine.XYZBC = vec
                 FreeCAD.Gui.updateGui()
-                time.sleep(1 / max(1., self.rates.value()))
+                # time.sleep(1 / max(1., self.rates.value()))
                 row = f.readline()
         self.Run = False
 
@@ -791,11 +800,6 @@ def InitDll():
     return lib
 
 
-try:
-    lib = InitDll()
-except Exception as ex:
-    lib = ""
-    print('dll is not available')
 doc = App.newDocument('AcsStage')
 axesinfo = (('X', -200, 200), ('Y', -200, 200), ('Z', 0, 350), ('B', -90, 90), ('C', -180, 180))  # motion limits
 machine = Machine(doc, axesinfo)
@@ -807,4 +811,9 @@ mw = FreeCADGui.getMainWindow()
 ev = QtGui.QKeyEvent(QtCore.QEvent.KeyPress, QtCore.Qt.Key_F11, QtCore.Qt.NoModifier)
 QtGui.QApplication.sendEvent(mw, ev)
 mw.showMinimized()
+try:
+    lib = InitDll()
+except Exception as ex:
+    lib = ""
+    print('dll is not available')
 gui = MachineGui(machine, lib)
