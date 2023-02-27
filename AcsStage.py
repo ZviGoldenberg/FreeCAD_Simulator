@@ -48,6 +48,7 @@ def RotaryScale(doc, name, radius):
 
 def Workpiece(doc, dim):
     # see file:///C:\Projects\ACS\5axes\AcsStageModel\FreeCad\workpiece.pdf
+    # dim[0] is a distance between the machine zero and the workpiece bottom plain
     body = doc.addObject('PartDesign::Body', 'Workpiece')
     xy = doc.getObject('XY_Plane')
     cyl1 = body.newObject('PartDesign::AdditiveCylinder', 'PCylinder1')
@@ -245,7 +246,8 @@ def Bed(doc, dim):
 def Build(doc, g, b):
     # create components
     # see file:///C:\Projects\ACS\5axes\AcsStageModel\FreeCad\workpiece.pdf
-    workpiece = Workpiece(doc, (52, 70.91708, 36, 20, 2.5, 40, 7.5, 22))
+    # The first parameter is a distance between the machine zero and the workpiece bottom plain
+    workpiece = Workpiece(doc, (55, 70.91708, 36, 20, 3, 40, 7.5, 22))
     # see file:///C:\Projects\ACS\5axes\AcsStageModel\FreeCad\acsstage.pdf
     indexer = Indexer(doc, (60, 25, g))
     gimbal = Gimbal(doc, (278, 130, 25, 139, -25, 60, 19, 40, 50, g + 25, 49, 32.5, 20, 0))
@@ -422,11 +424,9 @@ class Machine:
         return direct, feedback
 
     def GetKinematicMatricesByMachine(self, b, c):
-        b, c = b * math.pi / 180, c * math.pi / 180  # Convert to radians
+        b, c = -b * math.pi / 180, -c * math.pi / 180  # Convert to radians
         sb, cb, sc, cc = math.sin(b), math.cos(b), math.sin(c), math.cos(c)
-        # direct = np.array([[-cb*cc, cb*sc, -sb, 0], [-sc, -cc, 0, 0], [-sb*cc, sb*sc, cb, self.BeamLength], [0, 0, 0, 1]], dtype=float)
         direct = np.array([[cb * cc, cb * sc, -sb, 0], [-sc, cc, 0, 0], [sb * cc, sb * sc, cb, self.BeamLength], [0, 0, 0, 1]], dtype=float)
-        # feedback = np.array([[-cb*cc, -sc, -sb*cc, self.BeamLength*sb*cc], [cb*sc, -cc, sb*sc, -self.BeamLength*sb*sc], [-sb, 0, cb, -self.BeamLength*cb], [0, 0, 0, 1]], dtype=float)
         feedback = np.array(
             [[cb * cc, -sc, sb * cc, -self.BeamLength * sb * cc], [cb * sc, cc, sb * sc, -self.BeamLength * sb * sc],
              [-sb, 0, cb, -self.BeamLength * cb], [0, 0, 0, 1]], dtype=float)
@@ -573,7 +573,8 @@ class MachineGui(QtGui.QMainWindow):
         self.pstart.setStyleSheet('color: red;' if self.run else 'color: black;')
 
     def ZeroAll(self):
-        WP_Height = 70.9
+        inside_table_part = 3
+        WP_Height = 70.9 - inside_table_part
         Z0 = (WP_Height - self.machine.g + self.machine.beamlength) if self.workpiece.isChecked() else 0
         self.XYZBC = (0, 0, Z0, 0, 0, None)
         self.machine.XYZBC = (0, 0, Z0, 0, 0, None)
@@ -676,10 +677,8 @@ class MachineGui(QtGui.QMainWindow):
                 offs = desc['offsets']
                 print('offsets:', offs)
                 fixture, ffixture = self.GetFixtureMatrices(offs)
-                print('fixture:')
-                print(fixture)
-                print('ffixture:')
-                print(ffixture)
+                print('fixture:', fixture)
+                print('ffixture:', ffixture)
                 print('verify:', fixture @ ffixture)
                 print('Beam length: ', flen)
                 self.machine.BeamLength = flen
@@ -727,6 +726,7 @@ class MachineGui(QtGui.QMainWindow):
                         fpart = np.append(feedback_dll, 1.0)
                     else:
                         # calculate in python
+                        print('vpart:', vpart)
                         vprincipal = fixture @ np.array(
                             [vpart[0], vpart[1], vpart[2], 1.0])  # Multiplication fixture by xyz1 input vector
                         print('principal:', vprincipal)
@@ -742,10 +742,6 @@ class MachineGui(QtGui.QMainWindow):
                         # print('vmachine:', vmachine)
                         fprincipal = np.append(fprincipal[:3], [vpart[3], vpart[4], 1.0])
                         fpart = np.append(fpart[:3], [vpart[3], vpart[4], 1.0])
-                        vmachine[0] = -vmachine[0]
-                        vmachine[1] = -vmachine[1]
-                        vmachine[3] = -vmachine[3]
-                        vmachine[4] = -vmachine[4]
                 elif coor == 'machine':
                     vmachine = vpart
                     vmachine[0] = -vmachine[0]
