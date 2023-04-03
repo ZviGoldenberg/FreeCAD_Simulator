@@ -247,7 +247,7 @@ def Build(doc, g, b):
     # create components
     # see file:///C:\Projects\ACS\5axes\AcsStageModel\FreeCad\workpiece.pdf
     # The first parameter is a distance between the machine zero and the workpiece bottom plain
-    workpiece = Workpiece(doc, (55, 70.91708, 36, 20, 3, 40, 7.5, 22))
+    workpiece = Workpiece(doc, (55, 70.91708, 38, 20, 3, 40, 7.5, 22))
     # see file:///C:\Projects\ACS\5axes\AcsStageModel\FreeCad\acsstage.pdf
     indexer = Indexer(doc, (60, 25, g))
     gimbal = Gimbal(doc, (278, 130, 25, 139, -25, 60, 19, 40, 50, g + 25, 49, 32.5, 20, 0))
@@ -424,11 +424,11 @@ class Machine:
         return direct, feedback
 
     def GetKinematicMatricesByMachine(self, b, c):
-        b, c = -b * math.pi / 180, -c * math.pi / 180  # Convert to radians
+        b, c = b * math.pi / 180, c * math.pi / 180  # Convert to radians
         sb, cb, sc, cc = math.sin(b), math.cos(b), math.sin(c), math.cos(c)
-        direct = np.array([[cb * cc, cb * sc, -sb, 0], [-sc, cc, 0, 0], [sb * cc, sb * sc, cb, self.BeamLength], [0, 0, 0, 1]], dtype=float)
+        direct = np.array([[cb * cc, -cb * sc, -sb, 0], [sc, cc, 0, 0], [sb * cc, -sb * sc, cb, self.BeamLength], [0, 0, 0, 1]], dtype=float)
         feedback = np.array(
-            [[cb * cc, -sc, sb * cc, -self.BeamLength * sb * cc], [cb * sc, cc, sb * sc, -self.BeamLength * sb * sc],
+            [[cb * cc, sc, sb * cc, -self.BeamLength * sb * cc], [-cb * sc, cc, -sb * sc, self.BeamLength * sb * sc],
              [-sb, 0, cb, -self.BeamLength * cb], [0, 0, 0, 1]], dtype=float)
         return direct, feedback
 
