@@ -98,7 +98,7 @@ def Indexer(doc, dim):
 def Gimbal(doc, dim):
     # see file:///C:\Projects\ACS\5axes\AcsStageModel\FreeCad\acsstage.pdf
     body = doc.addObject('PartDesign::Body', 'Gimbal')
-    body.Placement.Rotation.Axis = Vector(0, 1, 0)
+    body.Placement.Rotation.Axis = Vector(0, 0, 1)
     body.ViewObject.Visibility = False
 
     xy = doc.getObject('XY_Plane')
@@ -192,15 +192,37 @@ def Gimbal(doc, dim):
 
 
 def YBase(doc, dim):
+    #Input: dim[0]=length, dim[1]=width, dim[2]=height, dim[3]=x offs, dim[4]=y offs, dim[5]=z offs
     # see file:///C:\Projects\ACS\5axes\AcsStageModel\FreeCad\acsstage.pdf
     body = doc.addObject('PartDesign::Body', 'YBase')
-    box = body.newObject('PartDesign::AdditiveBox', 'YBox')
-    box.Length, box.Width, box.Height = dim[1], dim[0], dim[2]
+    box = body.newObject('PartDesign::AdditiveBox', 'YBaseBox')
+    box.Length, box.Width, box.Height = dim[0], dim[1], dim[2]
     box.Support, box.MapMode = doc.getObject('XY_Plane'), 'ObjectXY'
-    box.AttachmentOffset.Base = Vector(-box.Length / 2, -box.Width / 2, -dim[3])
+    box.AttachmentOffset.Base = Vector(dim[3], dim[4], dim[5])
     body.ViewObject.Visibility = False
     return body
 
+def XBase(doc, dim):
+    #Input: dim[0]=length, dim[1]=width, dim[2]=height, dim[3]=x offs, dim[4]=y offs, dim[5]=z offs
+    # see file:///C:\Projects\ACS\5axes\AcsStageModel\FreeCad\acsstage.pdf
+    body = doc.addObject('PartDesign::Body', 'XBase')
+    box = body.newObject('PartDesign::AdditiveBox', 'XBaseBox')
+    box.Length, box.Width, box.Height = dim[0], dim[1], dim[2]
+    box.Support, box.MapMode = doc.getObject('XY_Plane'), 'ObjectXY'
+    box.AttachmentOffset.Base = Vector(dim[3], dim[4], dim[5])
+    body.ViewObject.Visibility = False
+    return body
+
+def ZBase(doc, dim):
+    #Input: dim[0]=length, dim[1]=width, dim[2]=height, dim[3]=x offs, dim[4]=y offs, dim[5]=z offs
+    # see file:///C:\Projects\ACS\5axes\AcsStageModel\FreeCad\acsstage.pdf
+    body = doc.addObject('PartDesign::Body', 'ZBase')
+    box = body.newObject('PartDesign::AdditiveBox', 'ZBaseBox')
+    box.Length, box.Width, box.Height = dim[0], dim[1], dim[2]
+    box.Support, box.MapMode = doc.getObject('XY_Plane'), 'ObjectXY'
+    box.AttachmentOffset.Base = Vector(dim[3], dim[4], dim[5])
+    body.ViewObject.Visibility = False
+    return body
 
 def Head(doc, dim):
     # see file:///C:\Projects\ACS\5axes\AcsStageModel\FreeCad\acsstage.pdf
@@ -209,7 +231,7 @@ def Head(doc, dim):
     box = body.newObject('PartDesign::AdditiveBox', 'HBox')
     box.Length, box.Width, box.Height = dim[5], dim[6], dim[7]
     box.Support, box.MapMode = xy, 'ObjectXY'
-    box.AttachmentOffset.Base = Vector(-dim[5] + dim[4], -dim[6] / 2, dim[1] + dim[3])
+    box.AttachmentOffset.Base = Vector(-dim[5]/2, -dim[6] / 2, dim[1] + dim[3])
     cyl1 = body.newObject('PartDesign::AdditiveCylinder', 'HCylinder')
     cyl1.Radius, cyl1.Height = dim[2], dim[3]
     cyl1.Support, cyl1.MapMode = xy, 'ObjectXY'
@@ -230,61 +252,91 @@ def Bed(doc, dim):
     box1.Length, box1.Width, box1.Height = dim[0], dim[1], dim[2]
     box1.Support, box1.MapMode = doc.getObject('XY_Plane'), 'ObjectXY'
     box1.AttachmentOffset.Base = Vector(dim[8] - dim[0], -dim[1] / 2, -dim[9] - dim[2])
-    box2 = body.newObject('PartDesign::AdditiveBox', 'BBox2')
-    box2.Length, box2.Width, box2.Height = dim[3], dim[4], dim[5]
-    box2.Support, box2.MapMode = doc.getObject('XY_Plane'), 'ObjectXY'
-    box2.AttachmentOffset.Base = Vector(dim[8] - dim[0], -dim[4] / 2, -dim[9])
-    box3 = body.newObject('PartDesign::AdditiveBox', 'BBox3')
-    box3.Length, box3.Width, box3.Height = dim[6], dim[4], dim[7]
-    box3.Support, box3.MapMode = doc.getObject('XY_Plane'), 'ObjectXY'
-    box3.AttachmentOffset.Base = Vector(dim[8] - dim[0], -dim[4] / 2, -dim[9] + dim[5] - dim[7])
-    box3.Refine = True
+    #box2 = body.newObject('PartDesign::AdditiveBox', 'BBox2')
+    #box2.Length, box2.Width, box2.Height = dim[3], dim[4], dim[5]
+    #box2.Support, box2.MapMode = doc.getObject('XY_Plane'), 'ObjectXY'
+    #box2.AttachmentOffset.Base = Vector(dim[8] - dim[0], -dim[4] / 2, -dim[9])
+    #box3 = body.newObject('PartDesign::AdditiveBox', 'BBox3')
+    #box3.Length, box3.Width, box3.Height = dim[6], dim[4], dim[7]
+    #box3.Support, box3.MapMode = doc.getObject('XY_Plane'), 'ObjectXY'
+    #box3.AttachmentOffset.Base = Vector(dim[8] - dim[0], -dim[4] / 2, -dim[9] + dim[5] - dim[7])
+    #box3.Refine = True
     body.ViewObject.Visibility = False
     return body
 
 
 def Build(doc, g, b):
-    # create components
-    # see file:///C:\Projects\ACS\5axes\AcsStageModel\FreeCad\workpiece.pdf
-    # The first parameter is a distance between the machine zero and the workpiece bottom plain
-    workpiece = Workpiece(doc, (55, 70.91708, 38, 20, 3, 40, 7.5, 22))
-    # see file:///C:\Projects\ACS\5axes\AcsStageModel\FreeCad\acsstage.pdf
-    indexer = Indexer(doc, (60, 25, g))
-    gimbal = Gimbal(doc, (278, 130, 25, 139, -25, 60, 19, 40, 50, g + 25, 49, 32.5, 20, 0))
-    gimbalframe = Gimbal(doc, (
-    318, 130, 25, 159, 0, 0, 20, 65, 0, g + 25 + 25, 49, 32.5, -20, math.sqrt(77 * 77 + 130 * 130 / 4.)))
-    gimbalframe.Label = 'GimbalFrame'
-    ybase = YBase(doc, (550, 130, 40, g + 25 + 25 + 40))
-    head = Head(doc, (50, 55, 39, 80, 39, 202, 158, 154))
-    # bed = Bed(doc, (750,550,250,200,200,837,112,158,720,275,102))
-    bed = Bed(doc, (750, 550, 250, 162, 158, 837, 312, 600, 275, g + 25 + 25 + 40))
+    # Create components 
 
-    # combine into mechanisms
+    #Trace
     trace = Draft.makeWire([Vector(0, 0, 0), Vector(0, 0, -g)], closed=False, face=False)
     trace.ViewObject.Visibility = False
     tracelink = Link(doc, trace, 'Trace_')
+
+    #Workpiece
+    # see file:///C:\Projects\ACS\5axes\AcsStageModel\FreeCad\workpiece.pdf
+    # The first parameter is a distance between the machine zero and the workpiece bottom plain
+    workpiece = Workpiece(doc, (55, 70.91708, 38, 20, 3, 40, 7.5, 22))
     workpiecegroup = LinkGroup(doc, (workpiece), 'WorkpieceGroup')
+
+    #Indexer - axis C
+    indexer = Indexer(doc, (60, 25, g))
     indexergroup = LinkGroup(doc, (indexer, workpiecegroup, tracelink), 'IndexerGroup')
+
+    #Gimbal - axis A
+    # see file:///C:\Projects\ACS\5axes\AcsStageModel\FreeCad\acsstage.pdf
+    gimbal = Gimbal(doc, (278, 130, 25, 139, -25, 60, 19, 40, 50, g + 25, 49, 32.5, 20, 0))
     gimbalgroup = LinkGroup(doc, (gimbal, indexergroup), 'GimbalGroup')
     gimbalgroup.Placement.Rotation.Axis = Vector(0, 1, 0)
-    ygroup = LinkGroup(doc, (gimbalframe, gimbalgroup), 'YGroup')
-    xgroup = LinkGroup(doc, (ybase, ygroup), 'XGroup')
+
+    gimbalframe = Gimbal(doc, (318, 130, 25, 159, 0, 0, 20, 65, 0, g + 25 + 25, 49, 32.5, -20, math.sqrt(77 * 77 + 130 * 130 / 4.)))
+    gimbalframe.Label = 'GimbalFrame'
+    gimbalframegroup = LinkGroup(doc, (gimbalframe, gimbalgroup), 'GimbalBaseGroup')
+
+    #Laser head
     beam = Draft.makeWire([Vector(0, 0, 0), Vector(0, 0, -b)])
     beam.ViewObject.Visibility = False
     beamlink = Link(doc, beam, 'Beam_')
-    zgroup = LinkGroup(doc, (head, beamlink), 'ZGroup')
-    machine = LinkGroup(doc, (bed, xgroup, zgroup), 'Machine')
 
-    # colorize
-    indexer.ViewObject.ShapeColor = (1.00, 0.83, 0.14)
-    gimbal.ViewObject.ShapeColor = (0.79, 1.00, 0.04)
-    head.ViewObject.ShapeColor = (84. / 255, 193. / 255, 1.)
-    ybase.ViewObject.ShapeColor = (1., 1., 127. / 255)
-    gimbalframe.ViewObject.ShapeColor = (1., 170. / 255, 1.)
+    head_small_rad = 15; head_small_height = 30; head_large_rad = 30; head_large_height = 60; head_box_len = 80; head_box_wid = 130; head_box_height = 120
+    head = Head(doc, (head_small_rad, head_small_height, head_large_rad, head_large_height, 0, head_box_len, head_box_wid, head_box_height))
+    headgroup = LinkGroup(doc, (head, beamlink), 'HeadGroup')
+
+    # Build kinematic tree
+    machine_len = 750; machine_wid = 550
+
+    #ZBasis: travel base for Z axis
+    zb_len = 40; zb_wid = head_box_wid; zv_he = 500
+    zbase = ZBase(doc, (zb_len, zb_wid, zv_he, -zb_len - head_box_len/2, -zb_wid/2, g*2))
+    zgroup = LinkGroup(doc, (zbase, headgroup), 'ZGroup')
+
+    #XBasis: travel base for X axis
+    xb_len = 150; xb_wid = machine_wid-100; xv_he = 150
+    xbase = XBase(doc, (xb_len, xb_wid, xv_he, -xb_len - zb_len - head_box_len/2, -xb_wid/2, g*2))
+    xgroup = LinkGroup(doc, (xbase, zgroup), 'XGroup')
+
+    #YBasis: travel base for Y axis, base gantry construction
+    yb_len = 130; yb_wid = machine_wid; yv_he = 40
+    ybase = YBase(doc, (yb_len, yb_wid, yv_he, -yb_len/2, -yb_wid/2, -(g + 25 + 25 + 40))) 
+    ygroup = LinkGroup(doc, (ybase, xgroup), 'YGroup')
+
+    #Machine
+    bed = Bed(doc, (machine_len, machine_wid, 250, 162, 158, 837, 312, 600, 275, g + 25 + 25 + 40))
+    machine = LinkGroup(doc, (bed, ygroup, gimbalframegroup), 'Machine')
+
+    # Colorize
     trace.ViewObject.LineColor = (1., 0., 0.)
     trace.ViewObject.PointColor = (1., 0., 0.)
+    indexer.ViewObject.ShapeColor = (1.00, 0.83, 0.14)
+    gimbal.ViewObject.ShapeColor = (0.79, 1.00, 0.04)
+    gimbalframe.ViewObject.ShapeColor = (1., 170. / 255, 1.)
     beam.ViewObject.LineColor = (1., 1., 1.)
-    return (machine, xgroup, ygroup, zgroup, gimbalgroup, indexergroup, beamlink, tracelink, workpiecegroup)
+    head.ViewObject.ShapeColor = (84. / 255, 193. / 255, 1.)
+    zbase.ViewObject.ShapeColor = (1., 0., 0.)
+    xbase.ViewObject.ShapeColor = (0., 1., 0.)
+    ybase.ViewObject.ShapeColor = (1., 1., 127. / 255)
+
+    return (machine, ygroup, xgroup, zgroup, headgroup, beamlink, gimbalframegroup, gimbalgroup, indexergroup, workpiecegroup, tracelink)
 
 
 class Machine:
@@ -293,8 +345,11 @@ class Machine:
         self.doc = doc
         self.beamlength = 52
         self.g = 52  # distance between the center of table and B rotation axis
-        self.machine, self.xgroup, self.ygroup, self.zgroup, self.gimbalgroup, self.indexergroup, self.beam, self.trace, self.workpiece = Build(
-            doc, self.g, self.beamlength)
+        try:
+            #self.machine, self.xgroup, self.ygroup, self.zgroup, self.gimbalgroup, self.indexergroup, self.beam, self.trace, self.workpiece = Build(doc, self.g, self.beamlength)
+            self.machine, self.ygroup, self.xgroup, self.zgroup, self.headgroup, self.beam, self.gimbalframegroup, self.gimbalgroup, self.indexergroup, self.workpiece, self.trace = Build(doc, self.g, self.beamlength)
+        except Exception as ex:
+            print(ex)
         self.mg2l, self.ml2g, self.mvalid = Matrix(), Matrix(), True
         self.totrace, self.tracepoints = False, []
         self.dummytrace = [Vector(0, 0, -53), Vector(0, 0, -53.001)]
@@ -327,35 +382,41 @@ class Machine:
 
     @property
     def X(self):
-        return -self.xgroup.Placement.Base.x
+        return -self.zgroup.Placement.Base.y
+        # return -self.xgroup.Placement.Base.x
 
     @X.setter
     def X(self, value):
         if (value is not None) and (not np.isnan(value)) and (value != self.X):
-            self.xgroup.Placement.Base.x = -value
-            self.xgroup.recompute()
+            self.zgroup.Placement.Base.y = -value
+            self.zgroup.recompute()
+            #self.xgroup.Placement.Base.x = -value
+            #self.xgroup.recompute()
             self.mvalid = False
 
     @property
     def Y(self):
-        return -self.ygroup.Placement.Base.y
+        return -self.xgroup.Placement.Base.x
+        # return -self.ygroup.Placement.Base.y
 
     @Y.setter
     def Y(self, value):
         if (value is not None) and (not np.isnan(value)) and (value != self.Y):
-            self.ygroup.Placement.Base.y = -value
-            self.ygroup.recompute()
+            self.xgroup.Placement.Base.x = -value
+            self.xgroup.recompute()
+            #self.ygroup.Placement.Base.y = -value
+            #self.ygroup.recompute()
             self.mvalid = False
 
     @property
     def Z(self):
-        return self.zgroup.Placement.Base.z
+        return self.headgroup.Placement.Base.z
 
     @Z.setter
     def Z(self, value):
         if (value is not None) and (not np.isnan(value)) and (value != self.Z):
-            self.zgroup.Placement.Base.z = value
-            self.zgroup.recompute()
+            self.headgroup.Placement.Base.z = value
+            self.headgroup.recompute()
             self.mvalid = False
 
     @property
@@ -797,7 +858,7 @@ def InitDll():
     return lib
 
 
-doc = App.newDocument('AcsStage')
+doc = App.newDocument('SynovaStage')
 axesinfo = (('X', -200, 200), ('Y', -200, 200), ('Z', 0, 350), ('B', -90, 90), ('C', -180, 180))  # motion limits
 machine = Machine(doc, axesinfo)
 doc.recompute()
