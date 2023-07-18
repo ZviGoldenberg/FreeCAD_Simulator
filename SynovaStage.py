@@ -5,7 +5,6 @@ from FreeCAD import Vector, Matrix, Placement
 from PySide import QtGui, QtCore
 import os, json
 import numpy as np
-import pdb
 import ctypes
 
 
@@ -191,6 +190,26 @@ def Gimbal(doc, dim):
     return body
 
 
+def GantryFrame(doc, dim):
+    # Builds a box frame. Currently builds the basis consisting of 4 thin boxes standing on 4 thin columns. In the future consider using dodo WB frames
+    #Input: dim[0]=length, dim[1]=width, dim[2]=height, dim[3]=x offs, dim[4]=y offs, dim[5]=z offs
+    # see file:///C:\Projects\ACS\5axes\AcsStageModel\FreeCad\acsstage.pdf
+    boxThick = 5
+    body = doc.addObject('PartDesign::Body', 'GantryFrame')
+
+    box1 = body.newObject('PartDesign::AdditiveBox', 'GantryBox1')
+    box1.Length, box1.Width, box1.Height = dim[0], boxThick, boxThick
+    box1.Support, box1.MapMode = doc.getObject('XY_Plane'), 'ObjectXY'
+    box1.AttachmentOffset.Base = Vector(dim[3], dim[4]+boxThick*2, dim[5]-boxThick)
+
+    #box2 = body.newObject('PartDesign::AdditiveBox', 'GantryBox2')
+    #box2.Length, box2.Width, box2.Height = dim[0], boxThick, boxThick
+    #box2.Support, box2.MapMode = doc.getObject('XY_Plane'), 'ObjectXY'
+    #box2.AttachmentOffset.Base = Vector(dim[3], dim[4]+boxThick*2+dim[1], dim[5]-boxThick)
+
+    body.ViewObject.Visibility = False
+    return body
+
 def YBase(doc, dim):
     #Input: dim[0]=length, dim[1]=width, dim[2]=height, dim[3]=x offs, dim[4]=y offs, dim[5]=z offs
     # see file:///C:\Projects\ACS\5axes\AcsStageModel\FreeCad\acsstage.pdf
@@ -311,18 +330,23 @@ def Build(doc, g, b):
     zgroup = LinkGroup(doc, (zbase, headgroup), 'ZGroup')
 
     #XBasis: travel base for X axis
-    xb_len = 150; xb_wid = machine_wid-100; xv_he = 150
+    xb_len = 150; xb_wid = machine_wid; xv_he = 150
     xbase = XBase(doc, (xb_len, xb_wid, xv_he, -xb_len - zb_len - head_box_len/2, -xb_wid/2, g*2))
     xgroup = LinkGroup(doc, (xbase, zgroup), 'XGroup')
 
+    #GantryFrame
+    gan_len = 500; gan_height = g*2
+    gantryFrame = GantryFrame(doc, (gan_len, machine_wid, gan_height, -machine_len/2, -xb_wid/2, gan_height))
+    gantryGroup = LinkGroup(doc, (gantryFrame, xgroup), 'GantryGroup')
+
     #YBasis: travel base for Y axis, base gantry construction
-    yb_len = 130; yb_wid = machine_wid; yv_he = 40
-    ybase = YBase(doc, (yb_len, yb_wid, yv_he, -yb_len/2, -yb_wid/2, -(g + 25 + 25 + 40))) 
-    ygroup = LinkGroup(doc, (ybase, xgroup), 'YGroup')
+    yb_len = gan_len; yb_wid = machine_wid; yv_he = 40
+    ybase = YBase(doc, (yb_len, yb_wid, yv_he, -machine_len/2, -xb_wid/2, -(g + 25 + 25 + 40))) 
+    ygroup = LinkGroup(doc, (ybase, gantryGroup), 'YGroup')
 
     #Machine
     bed = Bed(doc, (machine_len, machine_wid, 250, 162, 158, 837, 312, 600, 275, g + 25 + 25 + 40))
-    machine = LinkGroup(doc, (bed, ygroup, gimbalframegroup), 'Machine')
+    machine = LinkGroup(doc, (bed, gimbalframegroup), 'Machine')
 
     # Colorize
     trace.ViewObject.LineColor = (1., 0., 0.)
@@ -335,6 +359,7 @@ def Build(doc, g, b):
     zbase.ViewObject.ShapeColor = (1., 0., 0.)
     xbase.ViewObject.ShapeColor = (0., 1., 0.)
     ybase.ViewObject.ShapeColor = (1., 1., 127. / 255)
+    gantryFrame.ViewObject.ShapeColor = (1., 0., 0.)
 
     return (machine, ygroup, xgroup, zgroup, headgroup, beamlink, gimbalframegroup, gimbalgroup, indexergroup, workpiecegroup, tracelink)
 
@@ -570,7 +595,7 @@ class MachineGui(QtGui.QMainWindow):
         self.cleartrace.clicked.connect(lambda s: self.machine.resetTrace())
         self.workpiece = QtGui.QCheckBox('Workpiece', self)
         self.workpiece.setGeometry(15, 285, 80, 20)
-        self.workpiece.setChecked(True)
+        #self.workpiece.setChecked(True)
         self.workpiece.stateChanged.connect(lambda s: self.machine.setWorkpiece(self.workpiece.isChecked()))
         self.usedll = QtGui.QCheckBox('Use DLL', self)
         self.usedll.setGeometry(15, 305, 80, 20)
