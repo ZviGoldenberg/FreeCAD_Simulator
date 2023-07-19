@@ -197,18 +197,36 @@ def GantryFrame(doc, dim):
     boxThick = 5
     body = doc.addObject('PartDesign::Body', 'GantryFrame')
 
-    box1 = body.newObject('PartDesign::AdditiveBox', 'GantryBox1')
+    # right bottom side
+    box1 = doc.addObject('PartDesign::AdditiveBox', 'GantryBox1')
     box1.Length, box1.Width, box1.Height = dim[0], boxThick, boxThick
     box1.Support, box1.MapMode = doc.getObject('XY_Plane'), 'ObjectXY'
     box1.AttachmentOffset.Base = Vector(dim[3], dim[4]+boxThick*2, dim[5]-boxThick)
 
-    #box2 = body.newObject('PartDesign::AdditiveBox', 'GantryBox2')
-    #box2.Length, box2.Width, box2.Height = dim[0], boxThick, boxThick
-    #box2.Support, box2.MapMode = doc.getObject('XY_Plane'), 'ObjectXY'
-    #box2.AttachmentOffset.Base = Vector(dim[3], dim[4]+boxThick*2+dim[1], dim[5]-boxThick)
+    # left bottom side
+    box2 = doc.addObject('PartDesign::AdditiveBox', 'GantryBox2')
+    box2.Length, box2.Width, box2.Height = dim[0], boxThick, boxThick
+    box2.Support, box2.MapMode = doc.getObject('XY_Plane'), 'ObjectXY'
+    box2.AttachmentOffset.Base = Vector(dim[3], dim[4]-boxThick*2+dim[1], dim[5]-boxThick)
 
+    #  back right leg
+    box3 = doc.addObject('PartDesign::AdditiveBox', 'GantryBox2')
+    box3.Length, box3.Width, box3.Height = dim[0], boxThick, boxThick
+    box3.Support, box3.MapMode = doc.getObject('XY_Plane'), 'ObjectXY'
+    box3.AttachmentOffset.Base = Vector(dim[3], dim[4]-boxThick*2+dim[1], dim[5]-boxThick)
+
+    #  forth right leg
+
+    # body.addObjects([box1, box2])
     body.ViewObject.Visibility = False
-    return body
+
+    link = LinkGroup(doc, (body, box1, box2), 'GantryFrameGroup_')
+
+    #group = doc.addObject('App::DocumentObjectGroup', 'GantryFrameGroup_')
+    #group.Group = [box1, box2]
+    #group.ViewObject.Visibility = False
+
+    return body, link
 
 def YBase(doc, dim):
     #Input: dim[0]=length, dim[1]=width, dim[2]=height, dim[3]=x offs, dim[4]=y offs, dim[5]=z offs
@@ -317,7 +335,7 @@ def Build(doc, g, b):
     beam.ViewObject.Visibility = False
     beamlink = Link(doc, beam, 'Beam_')
 
-    head_small_rad = 15; head_small_height = 30; head_large_rad = 30; head_large_height = 60; head_box_len = 80; head_box_wid = 130; head_box_height = 120
+    head_small_rad = 15; head_small_height = g; head_large_rad = 30; head_large_height = g; head_box_len = 80; head_box_wid = 130; head_box_height = 120
     head = Head(doc, (head_small_rad, head_small_height, head_large_rad, head_large_height, 0, head_box_len, head_box_wid, head_box_height))
     headgroup = LinkGroup(doc, (head, beamlink), 'HeadGroup')
 
@@ -335,9 +353,9 @@ def Build(doc, g, b):
     xgroup = LinkGroup(doc, (xbase, zgroup), 'XGroup')
 
     #GantryFrame
-    gan_len = 500; gan_height = g*2
-    gantryFrame = GantryFrame(doc, (gan_len, machine_wid, gan_height, -machine_len/2, -xb_wid/2, gan_height))
-    gantryGroup = LinkGroup(doc, (gantryFrame, xgroup), 'GantryGroup')
+    gan_len = 500; gan_width = machine_wid; gan_height = g*2
+    gantryFrame, gantryFrameGroup = GantryFrame(doc, (gan_len, machine_wid, gan_height, -machine_len/2, -xb_wid/2, gan_height))
+    gantryGroup = LinkGroup(doc, (gantryFrameGroup, xgroup), 'GantryGroup')
 
     #YBasis: travel base for Y axis, base gantry construction
     yb_len = gan_len; yb_wid = machine_wid; yv_he = 40
@@ -595,8 +613,8 @@ class MachineGui(QtGui.QMainWindow):
         self.cleartrace.clicked.connect(lambda s: self.machine.resetTrace())
         self.workpiece = QtGui.QCheckBox('Workpiece', self)
         self.workpiece.setGeometry(15, 285, 80, 20)
-        #self.workpiece.setChecked(True)
         self.workpiece.stateChanged.connect(lambda s: self.machine.setWorkpiece(self.workpiece.isChecked()))
+        self.workpiece.setChecked(False)
         self.usedll = QtGui.QCheckBox('Use DLL', self)
         self.usedll.setGeometry(15, 305, 80, 20)
         if self.lib is not "":
@@ -607,6 +625,7 @@ class MachineGui(QtGui.QMainWindow):
         self.bclose.setGeometry(190, 325, 50, 20)
         self.bclose.clicked.connect(lambda s: self.close())
         self.ZeroAll()
+        self.machine.setWorkpiece(False)
         self.show()
 
     def closeEvent(self, event):
@@ -884,7 +903,7 @@ def InitDll():
 
 
 doc = App.newDocument('SynovaStage')
-axesinfo = (('X', -200, 200), ('Y', -200, 200), ('Z', 0, 350), ('B', -90, 90), ('C', -180, 180))  # motion limits
+axesinfo = (('X', -90, 90), ('Y', -200, 200), ('Z', 0, 350), ('B', -90, 90), ('C', -180, 180))  # motion limits
 machine = Machine(doc, axesinfo)
 doc.recompute()
 Gui.SendMsgToActiveView("ViewFit")
