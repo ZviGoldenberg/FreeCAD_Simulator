@@ -98,7 +98,7 @@ def Indexer(doc, dim):
 def Gimbal(doc, dim):
     # see file:///C:\Projects\ACS\5axes\AcsStageModel\FreeCad\acsstage.pdf
     body = doc.addObject('PartDesign::Body', 'Gimbal')
-    body.Placement.Rotation.Axis = Vector(0, 0, 1)
+    #body.Placement.Rotation.Axis = Vector(0, 0, 1)
     body.ViewObject.Visibility = False
 
     xy = doc.getObject(base_plane)
@@ -191,35 +191,36 @@ def Gimbal(doc, dim):
     return body
 
 
-def GantryFrame(doc, dim):
+def Gantry(doc, dim):
     # Builds a box frame. Currently builds the basis consisting of 4 thin boxes standing on 4 thin columns. In the future consider using dodo WB frames
-    #Input: dim[0]=length, dim[1]=width, dim[2]=height, dim[3]=x offs, dim[4]=y offs, dim[5]=z offs
+    #Input: dim[0]=length, dim[1]=width, dim[2]=height, dim[3]=len offs, dim[4]=wid offs, dim[5]=height offs
     # see file:///C:\Projects\ACS\5axes\AcsStageModel\FreeCad\acsstage.pdf
     boxThick = 5
-    body = doc.addObject('PartDesign::Body', 'GantryFrame')
 
     # right bottom side
-    box1 = doc.addObject('PartDesign::AdditiveBox', 'GantryBox1')
+    body1 = doc.addObject('PartDesign::Body', 'GantryBody1')
+    body1.ViewObject.Visibility = False
+    box1 = body1.newObject('PartDesign::AdditiveBox', 'GantryBox1')
     box1.Length, box1.Width, box1.Height = dim[0], boxThick, boxThick
     box1.Support, box1.MapMode = doc.getObject(base_plane), 'ObjectXY'
-    box1.AttachmentOffset.Base = Vector(dim[3], dim[4]+boxThick*2, dim[5]-boxThick)
+    box1.AttachmentOffset.Base = Vector(-dim[0]/2-dim[3], -dim[1]/2+boxThick*2, dim[5]-boxThick)
 
     # left bottom side
-    box2 = doc.addObject('PartDesign::AdditiveBox', 'GantryBox2')
+    body2 = doc.addObject('PartDesign::Body', 'GantryBody2')
+    body2.ViewObject.Visibility = False
+    box2 = body2.newObject('PartDesign::AdditiveBox', 'GantryBox2')
     box2.Length, box2.Width, box2.Height = dim[0], boxThick, boxThick
     box2.Support, box2.MapMode = doc.getObject(base_plane), 'ObjectXY'
-    box2.AttachmentOffset.Base = Vector(dim[3], dim[4]-boxThick*2+dim[1], dim[5]-boxThick)
+    box2.AttachmentOffset.Base = Vector(-dim[0]/2-dim[3], dim[1]/2-boxThick*3, dim[5]-boxThick)
 
-    # body.addObjects([box1, box2])
-    body.ViewObject.Visibility = False
 
-    link = LinkGroup(doc, (body, box1, box2), 'GantryFrameGroup_')
+    #link = LinkGroup(doc, (body, box1, box2), 'GantryFrameGroup_')
 
     #group = doc.addObject('App::DocumentObjectGroup', 'GantryFrameGroup_')
     #group.Group = [box1, box2]
     #group.ViewObject.Visibility = False
 
-    return body, link
+    return body1, body2
 
 def YBase(doc, dim):
     #Input: dim[0]=length, dim[1]=width, dim[2]=height, dim[3]=x offs, dim[4]=y offs, dim[5]=z offs
@@ -306,7 +307,9 @@ def Bed(doc, dim):
 
 
 def Build(doc, g, b):
-    # Create components 
+    # Create components and build kinematics
+    machine_len = 750;
+    machine_wid = 550
 
     #Trace
     trace = Draft.makeWire([Vector(0, 0, 0), Vector(0, 0, -g)], closed=False, face=False)
@@ -342,38 +345,31 @@ def Build(doc, g, b):
     head = Head(doc, (head_small_rad, head_small_height, head_large_rad, head_large_height, 0, head_box_len, head_box_wid, head_box_height))
     headgroup = LinkGroup(doc, (head, beamlink), 'HeadGroup')
 
-    # Build kinematic tree
-    machine_len = 750; machine_wid = 550
-
     #ZBasis: travel base for Z axis
     zb_len = 40; zb_wid = head_box_wid; zv_he = 500
     zbase = ZBase(doc, (zb_len, zb_wid, zv_he, -zb_len - head_box_len/2, -zb_wid/2, g*2))
     zgroup = LinkGroup(doc, (zbase, headgroup), 'ZGroup')
-    # zgroup.Placement = App.Placement(App.Vector(0,0,0),App.Rotation(App.Vector(0,0,1),90))
 
     #XBasis: travel base for X axis
     xb_len = 150; xb_wid = machine_wid; xv_he = 150
     xbase = XBase(doc, (xb_len, xb_wid, xv_he, -xb_len - zb_len - head_box_len/2, -xb_wid/2, g*2))
     xgroup = LinkGroup(doc, (xbase, zgroup), 'XGroup')
-    xgroup.Placement = App.Placement(App.Vector(0,0,0),App.Rotation(App.Vector(0,0,1),90))
 
-    #GantryFrame
-    gan_len = 500; gan_width = machine_wid; gan_height = g*2
-    gantryFrame, gantryFrameGroup = GantryFrame(doc, (gan_len, machine_wid, gan_height, -machine_len/2, -xb_wid/2, gan_height))
-    gantryFrameGroup.Placement = App.Placement(App.Vector(0,0,0),App.Rotation(App.Vector(0,0,1),90))
-    gantryGroup = LinkGroup(doc, (gantryFrameGroup, xgroup), 'GantryGroup')
-    gantryGroup.Placement = App.Placement(App.Vector(0,0,0),App.Rotation(App.Vector(0,0,1),90))
+    #Gantry
+    gim_offs = 100
+    gan_len = machine_len; gan_width = machine_wid; gan_height = g*2
+    gantry = Gantry(doc, (gan_len, machine_wid, gan_height, gim_offs, 0, gan_height))
+    gantryGroup = LinkGroup(doc, (gantry[0], gantry[1], xgroup), 'GantryGroup')
 
     #YBasis: travel base for Y axis, base gantry construction
-    yb_len = gan_len; yb_wid = machine_wid; yv_he = 40
-    ybase = YBase(doc, (yb_len, yb_wid, yv_he, -machine_len/2, -xb_wid/2, -(g + 25 + 25 + 40))) 
+    yb_len = gan_len; yb_wid = gan_width; yv_he = 40
+    ybase = YBase(doc, (yb_len, yb_wid, yv_he, -gan_len/2-gim_offs, -yb_wid/2, -(g + 25 + 25 + 40)))
     ygroup = LinkGroup(doc, (ybase, gantryGroup), 'YGroup')
-    ygroup.Placement = App.Placement(App.Vector(0,0,0),App.Rotation(App.Vector(0,0,1),90))
 
     #Machine
     bed = Bed(doc, (machine_len, machine_wid, 250, 162, 158, 837, 312, 600, 275, g + 25 + 25 + 40))
-    machine = LinkGroup(doc, (bed, gimbalframegroup), 'Machine')
-    machine.Placement = App.Placement(App.Vector(0,0,0),App.Rotation(App.Vector(0,0,1),90))
+    machine = LinkGroup(doc, (bed, ygroup, gimbalframegroup), 'Machine')
+    machine.Placement = App.Placement(App.Vector(0,0,0),App.Rotation(App.Vector(0,0,1),-90))
 
     # Colorize
     trace.ViewObject.LineColor = (1., 0., 0.)
@@ -386,7 +382,8 @@ def Build(doc, g, b):
     zbase.ViewObject.ShapeColor = (1., 0., 0.)
     xbase.ViewObject.ShapeColor = (0., 1., 0.)
     ybase.ViewObject.ShapeColor = (1., 1., 127. / 255)
-    gantryFrame.ViewObject.ShapeColor = (1., 0., 0.)
+    for gantry_part in gantry:
+        gantry_part.ViewObject.ShapeColor = (1., 0., 0.)
 
     return (machine, ygroup, gantryGroup, xgroup, zgroup, headgroup, beamlink, gimbalframegroup, gimbalgroup, indexergroup, workpiecegroup, tracelink)
 
@@ -416,6 +413,7 @@ class Machine:
         self.ml2g = self.xgroup.Placement.Matrix * self.zgroup.Placement.Matrix * self.gimbalgroup.Placement.Matrix * self.indexergroup.Placement.Matrix
         self.mg2l = self.ml2g.inverse()
         self.mvalid = True
+        # return self.ml2g
         return self.mg2l
 
     @property
@@ -448,13 +446,13 @@ class Machine:
 
     @property
     def Y(self):
-        return self.xgroup.Placement.Base.y
+        return -self.xgroup.Placement.Base.x
         # return -self.ygroup.Placement.Base.y
 
     @Y.setter
     def Y(self, value):
         if (value is not None) and (not np.isnan(value)) and (value != self.Y):
-            self.xgroup.Placement.Base.y = value
+            self.xgroup.Placement.Base.x = -value
             self.xgroup.recompute()
             #self.ygroup.Placement.Base.y = -value
             #self.ygroup.recompute()
