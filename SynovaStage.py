@@ -7,6 +7,7 @@ import os, json
 import numpy as np
 import ctypes
 
+base_plane = 'XY_Plane'
 
 def Link(doc, object, name, copies=0):
     link = doc.addObject('App::Link', name)
@@ -49,7 +50,7 @@ def Workpiece(doc, dim):
     # see file:///C:\Projects\ACS\5axes\AcsStageModel\FreeCad\workpiece.pdf
     # dim[0] is a distance between the machine zero and the workpiece bottom plain
     body = doc.addObject('PartDesign::Body', 'Workpiece')
-    xy = doc.getObject('XY_Plane')
+    xy = doc.getObject(base_plane)
     cyl1 = body.newObject('PartDesign::AdditiveCylinder', 'PCylinder1')
     cyl1.Radius, cyl1.Height = dim[3], dim[4]
     cyl1.Support, cyl1.MapMode = xy, 'ObjectXY'
@@ -73,7 +74,7 @@ def Workpiece(doc, dim):
 def Indexer(doc, dim):
     # see file:///C:\Projects\ACS\5axes\AcsStageModel\FreeCad\acsstage.pdf
     body = doc.addObject('PartDesign::Body', 'Indexer')
-    xy = doc.getObject('XY_Plane')
+    xy = doc.getObject(base_plane)
     cyl2 = body.newObject('PartDesign::AdditiveCylinder', 'ICylinder')
     cyl2.Radius, cyl2.Height = dim[0], dim[1]
     cyl2.Support, cyl2.MapMode = xy, 'ObjectXY'
@@ -100,7 +101,7 @@ def Gimbal(doc, dim):
     body.Placement.Rotation.Axis = Vector(0, 0, 1)
     body.ViewObject.Visibility = False
 
-    xy = doc.getObject('XY_Plane')
+    xy = doc.getObject(base_plane)
     xz = doc.getObject('XZ_Plane')
     yz = doc.getObject('YZ_Plane')
 
@@ -200,22 +201,14 @@ def GantryFrame(doc, dim):
     # right bottom side
     box1 = doc.addObject('PartDesign::AdditiveBox', 'GantryBox1')
     box1.Length, box1.Width, box1.Height = dim[0], boxThick, boxThick
-    box1.Support, box1.MapMode = doc.getObject('XY_Plane'), 'ObjectXY'
+    box1.Support, box1.MapMode = doc.getObject(base_plane), 'ObjectXY'
     box1.AttachmentOffset.Base = Vector(dim[3], dim[4]+boxThick*2, dim[5]-boxThick)
 
     # left bottom side
     box2 = doc.addObject('PartDesign::AdditiveBox', 'GantryBox2')
     box2.Length, box2.Width, box2.Height = dim[0], boxThick, boxThick
-    box2.Support, box2.MapMode = doc.getObject('XY_Plane'), 'ObjectXY'
+    box2.Support, box2.MapMode = doc.getObject(base_plane), 'ObjectXY'
     box2.AttachmentOffset.Base = Vector(dim[3], dim[4]-boxThick*2+dim[1], dim[5]-boxThick)
-
-    #  back right leg
-    box3 = doc.addObject('PartDesign::AdditiveBox', 'GantryBox2')
-    box3.Length, box3.Width, box3.Height = dim[0], boxThick, boxThick
-    box3.Support, box3.MapMode = doc.getObject('XY_Plane'), 'ObjectXY'
-    box3.AttachmentOffset.Base = Vector(dim[3], dim[4]-boxThick*2+dim[1], dim[5]-boxThick)
-
-    #  forth right leg
 
     # body.addObjects([box1, box2])
     body.ViewObject.Visibility = False
@@ -234,8 +227,9 @@ def YBase(doc, dim):
     body = doc.addObject('PartDesign::Body', 'YBase')
     box = body.newObject('PartDesign::AdditiveBox', 'YBaseBox')
     box.Length, box.Width, box.Height = dim[0], dim[1], dim[2]
-    box.Support, box.MapMode = doc.getObject('XY_Plane'), 'ObjectXY'
+    box.Support, box.MapMode = doc.getObject(base_plane), 'ObjectXY'
     box.AttachmentOffset.Base = Vector(dim[3], dim[4], dim[5])
+    # box.AttachmentOffset = App.Placement(App.Vector(0,0,0),App.Rotation(App.Vector(0,0,1),90))
     body.ViewObject.Visibility = False
     return body
 
@@ -245,7 +239,9 @@ def XBase(doc, dim):
     body = doc.addObject('PartDesign::Body', 'XBase')
     box = body.newObject('PartDesign::AdditiveBox', 'XBaseBox')
     box.Length, box.Width, box.Height = dim[0], dim[1], dim[2]
-    box.Support, box.MapMode = doc.getObject('XY_Plane'), 'ObjectXY'
+    #box = body.newObject('PartDesign::AdditiveWedge', 'XBaseBox')
+    #box.Xmin, box.Xmax, box.Ymin, box.Ymax, box.Zmin, box.Zmax = 0,dim[0],0,dim[1],dim[2]/2,dim[2]
+    box.Support, box.MapMode = doc.getObject(base_plane), 'ObjectXY'
     box.AttachmentOffset.Base = Vector(dim[3], dim[4], dim[5])
     body.ViewObject.Visibility = False
     return body
@@ -256,14 +252,14 @@ def ZBase(doc, dim):
     body = doc.addObject('PartDesign::Body', 'ZBase')
     box = body.newObject('PartDesign::AdditiveBox', 'ZBaseBox')
     box.Length, box.Width, box.Height = dim[0], dim[1], dim[2]
-    box.Support, box.MapMode = doc.getObject('XY_Plane'), 'ObjectXY'
+    box.Support, box.MapMode = doc.getObject(base_plane), 'ObjectXY'
     box.AttachmentOffset.Base = Vector(dim[3], dim[4], dim[5])
     body.ViewObject.Visibility = False
     return body
 
 def Head(doc, dim):
     # see file:///C:\Projects\ACS\5axes\AcsStageModel\FreeCad\acsstage.pdf
-    xy = doc.getObject('XY_Plane')
+    xy = doc.getObject(base_plane)
     body = doc.addObject('PartDesign::Body', 'Head')
     box = body.newObject('PartDesign::AdditiveBox', 'HBox')
     box.Length, box.Width, box.Height = dim[5], dim[6], dim[7]
@@ -285,20 +281,27 @@ def Head(doc, dim):
 def Bed(doc, dim):
     # see file:///C:\Projects\ACS\5axes\AcsStageModel\FreeCad\acsstage.pdf
     body = doc.addObject('PartDesign::Body', 'Bed')
-    box1 = body.newObject('PartDesign::AdditiveBox', 'BBox1')
+
+    #body.newObject('Sketcher::SketchObject','Sketch')
+    #doc.getObject('Sketch').Support = (doc.getObject('XY_Plane'),[''])
+    #doc.getObject('Sketch').MapMode = 'FlatFace'
+    #doc.getObject('Sketch').AttachmentOffset = App.Placement(App.Vector(0,0,0),App.Rotation(App.Vector(0,0,1),90))
+
+    box1 = body.newObject('PartDesign::AdditiveBox', 'Box1')
     box1.Length, box1.Width, box1.Height = dim[0], dim[1], dim[2]
-    box1.Support, box1.MapMode = doc.getObject('XY_Plane'), 'ObjectXY'
+    box1.Support, box1.MapMode = doc.getObject(base_plane), 'ObjectXY'
     box1.AttachmentOffset.Base = Vector(dim[8] - dim[0], -dim[1] / 2, -dim[9] - dim[2])
     #box2 = body.newObject('PartDesign::AdditiveBox', 'BBox2')
     #box2.Length, box2.Width, box2.Height = dim[3], dim[4], dim[5]
-    #box2.Support, box2.MapMode = doc.getObject('XY_Plane'), 'ObjectXY'
+    #box2.Support, box2.MapMode = doc.getObject(base_plane), 'ObjectXY'
     #box2.AttachmentOffset.Base = Vector(dim[8] - dim[0], -dim[4] / 2, -dim[9])
     #box3 = body.newObject('PartDesign::AdditiveBox', 'BBox3')
     #box3.Length, box3.Width, box3.Height = dim[6], dim[4], dim[7]
-    #box3.Support, box3.MapMode = doc.getObject('XY_Plane'), 'ObjectXY'
+    #box3.Support, box3.MapMode = doc.getObject(base_plane), 'ObjectXY'
     #box3.AttachmentOffset.Base = Vector(dim[8] - dim[0], -dim[4] / 2, -dim[9] + dim[5] - dim[7])
     #box3.Refine = True
     body.ViewObject.Visibility = False
+    
     return body
 
 
@@ -346,25 +349,31 @@ def Build(doc, g, b):
     zb_len = 40; zb_wid = head_box_wid; zv_he = 500
     zbase = ZBase(doc, (zb_len, zb_wid, zv_he, -zb_len - head_box_len/2, -zb_wid/2, g*2))
     zgroup = LinkGroup(doc, (zbase, headgroup), 'ZGroup')
+    # zgroup.Placement = App.Placement(App.Vector(0,0,0),App.Rotation(App.Vector(0,0,1),90))
 
     #XBasis: travel base for X axis
     xb_len = 150; xb_wid = machine_wid; xv_he = 150
     xbase = XBase(doc, (xb_len, xb_wid, xv_he, -xb_len - zb_len - head_box_len/2, -xb_wid/2, g*2))
     xgroup = LinkGroup(doc, (xbase, zgroup), 'XGroup')
+    xgroup.Placement = App.Placement(App.Vector(0,0,0),App.Rotation(App.Vector(0,0,1),90))
 
     #GantryFrame
     gan_len = 500; gan_width = machine_wid; gan_height = g*2
     gantryFrame, gantryFrameGroup = GantryFrame(doc, (gan_len, machine_wid, gan_height, -machine_len/2, -xb_wid/2, gan_height))
+    gantryFrameGroup.Placement = App.Placement(App.Vector(0,0,0),App.Rotation(App.Vector(0,0,1),90))
     gantryGroup = LinkGroup(doc, (gantryFrameGroup, xgroup), 'GantryGroup')
+    gantryGroup.Placement = App.Placement(App.Vector(0,0,0),App.Rotation(App.Vector(0,0,1),90))
 
     #YBasis: travel base for Y axis, base gantry construction
     yb_len = gan_len; yb_wid = machine_wid; yv_he = 40
     ybase = YBase(doc, (yb_len, yb_wid, yv_he, -machine_len/2, -xb_wid/2, -(g + 25 + 25 + 40))) 
     ygroup = LinkGroup(doc, (ybase, gantryGroup), 'YGroup')
+    ygroup.Placement = App.Placement(App.Vector(0,0,0),App.Rotation(App.Vector(0,0,1),90))
 
     #Machine
     bed = Bed(doc, (machine_len, machine_wid, 250, 162, 158, 837, 312, 600, 275, g + 25 + 25 + 40))
     machine = LinkGroup(doc, (bed, gimbalframegroup), 'Machine')
+    machine.Placement = App.Placement(App.Vector(0,0,0),App.Rotation(App.Vector(0,0,1),90))
 
     # Colorize
     trace.ViewObject.LineColor = (1., 0., 0.)
@@ -379,7 +388,7 @@ def Build(doc, g, b):
     ybase.ViewObject.ShapeColor = (1., 1., 127. / 255)
     gantryFrame.ViewObject.ShapeColor = (1., 0., 0.)
 
-    return (machine, ygroup, xgroup, zgroup, headgroup, beamlink, gimbalframegroup, gimbalgroup, indexergroup, workpiecegroup, tracelink)
+    return (machine, ygroup, gantryGroup, xgroup, zgroup, headgroup, beamlink, gimbalframegroup, gimbalgroup, indexergroup, workpiecegroup, tracelink)
 
 
 class Machine:
@@ -390,7 +399,7 @@ class Machine:
         self.g = 52  # distance between the center of table and B rotation axis
         try:
             #self.machine, self.xgroup, self.ygroup, self.zgroup, self.gimbalgroup, self.indexergroup, self.beam, self.trace, self.workpiece = Build(doc, self.g, self.beamlength)
-            self.machine, self.ygroup, self.xgroup, self.zgroup, self.headgroup, self.beam, self.gimbalframegroup, self.gimbalgroup, self.indexergroup, self.workpiece, self.trace = Build(doc, self.g, self.beamlength)
+            self.machine, self.ygroup, self.gantryGroup, self.xgroup, self.zgroup, self.headgroup, self.beam, self.gimbalframegroup, self.gimbalgroup, self.indexergroup, self.workpiece, self.trace = Build(doc, self.g, self.beamlength)
         except Exception as ex:
             print(ex)
         self.mg2l, self.ml2g, self.mvalid = Matrix(), Matrix(), True
@@ -404,7 +413,7 @@ class Machine:
     @property
     def G2L(self):
         if self.mvalid: return self.mg2l
-        self.ml2g = self.xgroup.Placement.Matrix * self.ygroup.Placement.Matrix * self.gimbalgroup.Placement.Matrix * self.indexergroup.Placement.Matrix
+        self.ml2g = self.xgroup.Placement.Matrix * self.zgroup.Placement.Matrix * self.gimbalgroup.Placement.Matrix * self.indexergroup.Placement.Matrix
         self.mg2l = self.ml2g.inverse()
         self.mvalid = True
         return self.mg2l
@@ -425,13 +434,13 @@ class Machine:
 
     @property
     def X(self):
-        return -self.zgroup.Placement.Base.y
+        return self.zgroup.Placement.Base.y
         # return -self.xgroup.Placement.Base.x
 
     @X.setter
     def X(self, value):
         if (value is not None) and (not np.isnan(value)) and (value != self.X):
-            self.zgroup.Placement.Base.y = -value
+            self.zgroup.Placement.Base.y = value
             self.zgroup.recompute()
             #self.xgroup.Placement.Base.x = -value
             #self.xgroup.recompute()
@@ -439,13 +448,13 @@ class Machine:
 
     @property
     def Y(self):
-        return -self.xgroup.Placement.Base.x
+        return self.xgroup.Placement.Base.y
         # return -self.ygroup.Placement.Base.y
 
     @Y.setter
     def Y(self, value):
         if (value is not None) and (not np.isnan(value)) and (value != self.Y):
-            self.xgroup.Placement.Base.x = -value
+            self.xgroup.Placement.Base.y = value
             self.xgroup.recompute()
             #self.ygroup.Placement.Base.y = -value
             #self.ygroup.recompute()
