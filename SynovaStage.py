@@ -96,7 +96,6 @@ def Indexer(doc, dim):
 def Gimbal(doc, dim):
     # see file:///C:\Projects\ACS\5axes\AcsStageModel\FreeCad\acsstage.pdf
     body = doc.addObject('PartDesign::Body', 'Gimbal')
-    #body.Placement.Rotation.Axis = Vector(0, 0, 1)
     body.ViewObject.Visibility = False
 
     xy = doc.getObject('XY_Plane')
@@ -188,6 +187,25 @@ def Gimbal(doc, dim):
 
     return body
 
+def Head(doc, dim):
+    # see file:///C:\Projects\ACS\5axes\AcsStageModel\FreeCad\acsstage.pdf
+    xy = doc.getObject('XY_Plane')
+    body = doc.addObject('PartDesign::Body', 'Head')
+    box = body.newObject('PartDesign::AdditiveBox', 'HBox')
+    box.Length, box.Width, box.Height = dim[5], dim[6], dim[7]
+    box.Support, box.MapMode = xy, 'ObjectXY'
+    box.AttachmentOffset.Base = Vector(-dim[5]/2, -dim[6] / 2, dim[1] + dim[3])
+    cyl1 = body.newObject('PartDesign::AdditiveCylinder', 'HCylinder')
+    cyl1.Radius, cyl1.Height = dim[2], dim[3]
+    cyl1.Support, cyl1.MapMode = xy, 'ObjectXY'
+    cyl1.AttachmentOffset.Base = Vector(0, 0, dim[1])
+    cyl2 = body.newObject('PartDesign::AdditiveCylinder', 'HCylinder1')
+    cyl2.Radius, cyl2.Height = dim[0], dim[1]
+    cyl2.Support, cyl2.MapMode = xy, 'ObjectXY'
+    cyl2.AttachmentOffset.Base = Vector(0, 0, 0)
+    cyl2.Refine = True
+    body.ViewObject.Visibility = False
+    return body
 
 def Gantry(doc, dim):
     # Builds a box frame. Currently builds the basis consisting of 4 thin boxes standing on 4 thin columns. In the future consider using dodo WB frames
@@ -211,121 +229,38 @@ def Gantry(doc, dim):
     box2.Support, box2.MapMode = doc.getObject('XY_Plane'), 'ObjectXY'
     box2.AttachmentOffset.Base = Vector(-dim[0]/2-dim[3], dim[1]/2-boxThick*3, dim[5]-boxThick)
 
-
-    #link = LinkGroup(doc, (body, box1, box2), 'GantryFrameGroup_')
-
-    #group = doc.addObject('App::DocumentObjectGroup', 'GantryFrameGroup_')
-    #group.Group = [box1, box2]
-    #group.ViewObject.Visibility = False
-
     return body1, body2
 
-def YBase(doc, dim):
+def BaseBox(doc, dim, name):
     #Input: dim[0]=length, dim[1]=width, dim[2]=height, dim[3]=x offs, dim[4]=y offs, dim[5]=z offs
-    # see file:///C:\Projects\ACS\5axes\AcsStageModel\FreeCad\acsstage.pdf
-    body = doc.addObject('PartDesign::Body', 'YBase')
-    box = body.newObject('PartDesign::AdditiveBox', 'YBaseBox')
-    box.Length, box.Width, box.Height = dim[0], dim[1], dim[2]
-    box.Support, box.MapMode = doc.getObject('XY_Plane'), 'ObjectXY'
-    box.AttachmentOffset.Base = Vector(dim[3], dim[4], dim[5])
-    # box.AttachmentOffset = App.Placement(App.Vector(0,0,0),App.Rotation(App.Vector(0,0,1),90))
-    body.ViewObject.Visibility = False
-    return body
-
-def XBase(doc, dim):
-    #Input: dim[0]=length, dim[1]=width, dim[2]=height, dim[3]=x offs, dim[4]=y offs, dim[5]=z offs
-    # see file:///C:\Projects\ACS\5axes\AcsStageModel\FreeCad\acsstage.pdf
-    body = doc.addObject('PartDesign::Body', 'XBase')
-    box = body.newObject('PartDesign::AdditiveBox', 'XBaseBox')
-    box.Length, box.Width, box.Height = dim[0], dim[1], dim[2]
-    #box = body.newObject('PartDesign::AdditiveWedge', 'XBaseBox')
-    #box.Xmin, box.Xmax, box.Ymin, box.Ymax, box.Zmin, box.Zmax = 0,dim[0],0,dim[1],dim[2]/2,dim[2]
-    box.Support, box.MapMode = doc.getObject('XY_Plane'), 'ObjectXY'
-    box.AttachmentOffset.Base = Vector(dim[3], dim[4], dim[5])
-    body.ViewObject.Visibility = False
-    return body
-
-def ZBase(doc, dim):
-    #Input: dim[0]=length, dim[1]=width, dim[2]=height, dim[3]=x offs, dim[4]=y offs, dim[5]=z offs
-    # see file:///C:\Projects\ACS\5axes\AcsStageModel\FreeCad\acsstage.pdf
-    body = doc.addObject('PartDesign::Body', 'ZBase')
-    box = body.newObject('PartDesign::AdditiveBox', 'ZBaseBox')
+    body = doc.addObject('PartDesign::Body', f'{name}Base')
+    box = body.newObject('PartDesign::AdditiveBox', f'{name}BaseBox')
     box.Length, box.Width, box.Height = dim[0], dim[1], dim[2]
     box.Support, box.MapMode = doc.getObject('XY_Plane'), 'ObjectXY'
     box.AttachmentOffset.Base = Vector(dim[3], dim[4], dim[5])
     body.ViewObject.Visibility = False
     return body
-
-def Head(doc, dim):
-    # see file:///C:\Projects\ACS\5axes\AcsStageModel\FreeCad\acsstage.pdf
-    xy = doc.getObject('XY_Plane')
-    body = doc.addObject('PartDesign::Body', 'Head')
-    box = body.newObject('PartDesign::AdditiveBox', 'HBox')
-    box.Length, box.Width, box.Height = dim[5], dim[6], dim[7]
-    box.Support, box.MapMode = xy, 'ObjectXY'
-    box.AttachmentOffset.Base = Vector(-dim[5]/2, -dim[6] / 2, dim[1] + dim[3])
-    cyl1 = body.newObject('PartDesign::AdditiveCylinder', 'HCylinder')
-    cyl1.Radius, cyl1.Height = dim[2], dim[3]
-    cyl1.Support, cyl1.MapMode = xy, 'ObjectXY'
-    cyl1.AttachmentOffset.Base = Vector(0, 0, dim[1])
-    cyl2 = body.newObject('PartDesign::AdditiveCylinder', 'HCylinder1')
-    cyl2.Radius, cyl2.Height = dim[0], dim[1]
-    cyl2.Support, cyl2.MapMode = xy, 'ObjectXY'
-    cyl2.AttachmentOffset.Base = Vector(0, 0, 0)
-    cyl2.Refine = True
-    body.ViewObject.Visibility = False
-    return body
-
-
-def Bed(doc, dim):
-    # see file:///C:\Projects\ACS\5axes\AcsStageModel\FreeCad\acsstage.pdf
-    body = doc.addObject('PartDesign::Body', 'Bed')
-
-    #body.newObject('Sketcher::SketchObject','Sketch')
-    #doc.getObject('Sketch').Support = (doc.getObject('XY_Plane'),[''])
-    #doc.getObject('Sketch').MapMode = 'FlatFace'
-    #doc.getObject('Sketch').AttachmentOffset = App.Placement(App.Vector(0,0,0),App.Rotation(App.Vector(0,0,1),90))
-
-    box1 = body.newObject('PartDesign::AdditiveBox', 'Box1')
-    box1.Length, box1.Width, box1.Height = dim[0], dim[1], dim[2]
-    box1.Support, box1.MapMode = doc.getObject('XY_Plane'), 'ObjectXY'
-    box1.AttachmentOffset.Base = Vector(dim[8] - dim[0], -dim[1] / 2, -dim[9] - dim[2])
-    #box2 = body.newObject('PartDesign::AdditiveBox', 'BBox2')
-    #box2.Length, box2.Width, box2.Height = dim[3], dim[4], dim[5]
-    #box2.Support, box2.MapMode = doc.getObject('XY_Plane'), 'ObjectXY'
-    #box2.AttachmentOffset.Base = Vector(dim[8] - dim[0], -dim[4] / 2, -dim[9])
-    #box3 = body.newObject('PartDesign::AdditiveBox', 'BBox3')
-    #box3.Length, box3.Width, box3.Height = dim[6], dim[4], dim[7]
-    #box3.Support, box3.MapMode = doc.getObject('XY_Plane'), 'ObjectXY'
-    #box3.AttachmentOffset.Base = Vector(dim[8] - dim[0], -dim[4] / 2, -dim[9] + dim[5] - dim[7])
-    #box3.Refine = True
-    body.ViewObject.Visibility = False
-    
-    return body
-
 
 def Build(doc, g, b, gimbalY):
     # Create components and build kinematics
-    machine_len = 750;
-    machine_wid = 550
+    machine_len = 750; machine_wid = 550; machine_he = 250
 
-    #Trace
+    # Trace
     trace = Draft.makeWire([Vector(0, 0, 0), Vector(0, 0, -g)], closed=False, face=False)
     trace.ViewObject.Visibility = False
     tracelink = Link(doc, trace, 'Trace_')
 
-    #Workpiece
+    # Workpiece
     # see file:///C:\Projects\ACS\5axes\AcsStageModel\FreeCad\workpiece.pdf
     # The first parameter is a distance between the machine zero and the workpiece bottom plain
     workpiece = Workpiece(doc, (55, 70.91708, 38, 20, 3, 40, 7.5, 22))
     workpiecegroup = LinkGroup(doc, (workpiece), 'WorkpieceGroup')
 
-    #Indexer - axis C
+    # Indexer - axis C
     indexer = Indexer(doc, (60, 25, g))
     indexergroup = LinkGroup(doc, (indexer, workpiecegroup, tracelink), 'IndexerGroup')
 
-    #Gimbal - axis A
-    # see file:///C:\Projects\ACS\5axes\AcsStageModel\FreeCad\acsstage.pdf
+    # Gimbal - axis A or B
     gimbal = Gimbal(doc, (278, 130, 25, 139, -25, 60, 19, 40, 50, g + 25, 49, 32.5, 20, 0))
     gimbalgroup = LinkGroup(doc, (gimbal, indexergroup), 'GimbalGroup')
     gimbalgroup.Placement.Rotation.Axis = Vector(0, 1, 0)
@@ -334,39 +269,41 @@ def Build(doc, g, b, gimbalY):
     gimbalframe.Label = 'GimbalFrame'
     gimbalframegroup = LinkGroup(doc, (gimbalframe, gimbalgroup), 'GimbalBaseGroup')
 
-    #Laser head
+    # Laser beam
     beam = Draft.makeWire([Vector(0, 0, 0), Vector(0, 0, -b)])
     beam.ViewObject.Visibility = False
     beamlink = Link(doc, beam, 'Beam_')
 
+    # Z group
     head_small_rad = 15; head_small_height = g; head_large_rad = 30; head_large_height = g; head_box_len = 80; head_box_wid = 130; head_box_height = 120
     head = Head(doc, (head_small_rad, head_small_height, head_large_rad, head_large_height, 0, head_box_len, head_box_wid, head_box_height))
-    headgroup = LinkGroup(doc, (head, beamlink), 'HeadGroup')
+    zgroup = LinkGroup(doc, (head, beamlink), 'ZGroup')
 
-    #ZBasis: travel base for Z axis
-    zb_len = 40; zb_wid = head_box_wid; zv_he = 500
-    zbase = ZBase(doc, (zb_len, zb_wid, zv_he, -zb_len - head_box_len/2, -zb_wid/2, g*2))
-    zgroup = LinkGroup(doc, (zbase, headgroup), 'ZGroup')
-
-    #XBasis: travel base for X axis
-    xb_len = 150; xb_wid = machine_wid; xv_he = 150
-    xbase = XBase(doc, (xb_len, xb_wid, xv_he, -xb_len - zb_len - head_box_len/2, -xb_wid/2, g*2))
+    # X group: travel base for Z axis
+    xb_len = 40; xb_wid = head_box_wid; xb_he = 500
+    xbase = BaseBox(doc, (xb_len, xb_wid, xb_he, -xb_len - head_box_len/2, -xb_wid/2, g*2), 'X')
     xgroup = LinkGroup(doc, (xbase, zgroup), 'XGroup')
+
+    # Y group: travel base for X axis
+    yb_len = 150; yb_wid = machine_wid; yb_he = 150
+    ybase = BaseBox(doc, (yb_len, yb_wid, yb_he, -yb_len - xb_len - head_box_len/2, -yb_wid/2, g*2), 'Y')
+    ygroup = LinkGroup(doc, (ybase, xgroup), 'YGroup')
 
     #Gantry
     gim_offs = 100
     gan_len = machine_len; gan_width = machine_wid; gan_height = g*2
     gantry = Gantry(doc, (gan_len, machine_wid, gan_height, gim_offs, 0, gan_height))
-    gantryGroup = LinkGroup(doc, (gantry[0], gantry[1], xgroup), 'GantryGroup')
+    gantryGroup = LinkGroup(doc, (gantry[0], gantry[1], ygroup), 'GantryGroup')
 
-    #YBasis: travel base for Y axis, base gantry construction
-    yb_len = gan_len; yb_wid = gan_width; yv_he = 40
-    ybase = YBase(doc, (yb_len, yb_wid, yv_he, -gan_len/2-gim_offs, -yb_wid/2, -(g + 25 + 25 + 40)))
-    ygroup = LinkGroup(doc, (ybase, gantryGroup), 'YGroup')
+    #Gantry basis group
+    b_len = gan_len; b_wid = gan_width; b_he = 40
+    base = BaseBox(doc, (b_len, b_wid, b_he, -gan_len/2-gim_offs, -b_wid/2, -(g + 25 + 25 + 40)), '')
+    basegroup = LinkGroup(doc, (base, gantryGroup), 'BaseGroup')
 
     #Machine
-    bed = Bed(doc, (machine_len, machine_wid, 250, 162, 158, 837, 312, 600, 275, g + 25 + 25 + 40))
-    machine = LinkGroup(doc, (bed, ygroup, gimbalframegroup), 'Machine')
+    par1 = 275; par2 = g + 25 + 25 + 40
+    bed = BaseBox(doc, (machine_len, machine_wid, machine_he, par1-machine_len, -machine_wid/2, -par2-machine_he), 'Bed')
+    machine = LinkGroup(doc, (bed, basegroup, gimbalframegroup), 'Machine')
     if not gimbalY: # rotate the machine by -90 deg. to make the gimbal rotating around X axis
         machine.Placement = App.Placement(App.Vector(0,0,0),App.Rotation(App.Vector(0,0,1),-90))
 
@@ -378,13 +315,13 @@ def Build(doc, g, b, gimbalY):
     gimbalframe.ViewObject.ShapeColor = (1., 170. / 255, 1.)
     beam.ViewObject.LineColor = (1., 1., 1.)
     head.ViewObject.ShapeColor = (84. / 255, 193. / 255, 1.)
-    zbase.ViewObject.ShapeColor = (1., 0., 0.)
-    xbase.ViewObject.ShapeColor = (0., 1., 0.)
-    ybase.ViewObject.ShapeColor = (1., 1., 127. / 255)
+    xbase.ViewObject.ShapeColor = (1., 0., 0.)
+    ybase.ViewObject.ShapeColor = (0., 1., 0.)
+    base.ViewObject.ShapeColor = (1., 1., 127. / 255)
     for gantry_part in gantry:
         gantry_part.ViewObject.ShapeColor = (1., 0., 0.)
 
-    return (machine, ygroup, gantryGroup, xgroup, zgroup, headgroup, beamlink, gimbalframegroup, gimbalgroup, indexergroup, workpiecegroup, tracelink)
+    return (machine, basegroup, gantryGroup, ygroup, xgroup, zgroup, beamlink, gimbalframegroup, gimbalgroup, indexergroup, workpiecegroup, tracelink)
 
 
 class Machine:
@@ -393,13 +330,13 @@ class Machine:
         self.doc = doc
         self.beamlength = 52
         self.g = 52  # distance between the center of table and B rotation axis
-        self.gimbalY = False # define whether gimbal ritates around X or Y
+        self.gimbalY = False  # define whether gimbal rotates around X or Y
         self.gimbalDev = 0  # define gimbal axis angle deviation from cartesian axis (for error compensation testing)
-        self.xyDev = 0 # define XY orthoganality deviation (for error compensation testing)
-        self.xzDev = 0 # define XZ orthoganality deviation (for error compensation testing)
-        self.yzDev = 0 # define YZ orthoganality deviation (for error compensation testing)
+        self.xyDev = 0  # define XY orthogonality deviation (for error compensation testing)
+        self.xzDev = 0  # define XZ orthogonality deviation (for error compensation testing)
+        self.yzDev = 0  # define YZ orthogonality deviation (for error compensation testing)
         try:
-            self.machine, self.ygroup, self.gantryGroup, self.xgroup, self.zgroup, self.headgroup, self.beam, self.gimbalframegroup, self.gimbalgroup, self.indexergroup, self.workpiece, self.trace = Build(doc, self.g, self.beamlength, self.gimbalY)
+            self.machine, self.basegroup, self.gantryGroup, self.ygroup, self.xgroup, self.zgroup, self.beam, self.gimbalframegroup, self.gimbalgroup, self.indexergroup, self.workpiece, self.trace = Build(doc, self.g, self.beamlength, self.gimbalY)
         except Exception as ex:
             print(ex)
         self.mg2l, self.ml2g, self.mvalid = Matrix(), Matrix(), True
@@ -412,20 +349,10 @@ class Machine:
 
     @property
     def G2L(self):
-        if self.mvalid: return self.mg2l
-
-        # ml2gXY = self.xgroup.Placement.Matrix * self.zgroup.Placement.Matrix
-        # ml2gBC = self.gimbalgroup.Placement.Matrix * self.indexergroup.Placement.Matrix
-        # mg2lBC = ml2gBC.inverse()
-        # self.mg2l = ml2gXY * mg2lBC
-
-        if gimbalY:
-            self.ml2g = self.xgroup.Placement.Matrix * self.zgroup.Placement.Matrix * self.gimbalgroup.Placement.Matrix * self.indexergroup.Placement.Matrix
-        else:
-            self.ml2g = self.gimbalgroup.Placement.Matrix * self.indexergroup.Placement.Matrix
-        
+        if self.mvalid:
+            return self.mg2l
+        self.ml2g = self.gimbalgroup.Placement.Matrix * self.indexergroup.Placement.Matrix
         self.mg2l = self.ml2g.inverse()
-
         self.mvalid = True
         return self.mg2l
 
@@ -445,50 +372,50 @@ class Machine:
 
     @property
     def X(self):
-        if gimbalY:
-            return -self.xgroup.Placement.Base.x
+        if self.gimbalY:
+            return self.ygroup.Placement.Base.x
         else:
-            return self.zgroup.Placement.Base.y
+            return self.xgroup.Placement.Base.y
 
     @X.setter
     def X(self, value):
         if (value is not None) and (not np.isnan(value)) and (value != self.X):
             
-            if gimbalY:
-                self.xgroup.Placement.Base.x = -value
+            if self.gimbalY:
+                self.ygroup.Placement.Base.x = value
+                self.ygroup.recompute()
             else:
-                self.zgroup.Placement.Base.y = value
-            
-            self.zgroup.recompute()
+                self.xgroup.Placement.Base.y = value
+                self.xgroup.recompute()
             self.mvalid = False
 
     @property
     def Y(self):
-        if gimbalY:
-            return -self.ygroup.Placement.Base.y
+        if self.gimbalY:
+            return self.xgroup.Placement.Base.y
         else:
-            return -self.xgroup.Placement.Base.x
+            return -self.ygroup.Placement.Base.x
 
     @Y.setter
     def Y(self, value):
         if (value is not None) and (not np.isnan(value)) and (value != self.Y):
-            if gimbalY:
-                self.xgroup.Placement.Base.y = -value
+            if self.gimbalY:
+                self.xgroup.Placement.Base.y = value
+                self.xgroup.recompute()
             else:
                 self.ygroup.Placement.Base.x = -value
-            
-            self.xgroup.recompute()
+                self.ygroup.recompute()
             self.mvalid = False
 
     @property
     def Z(self):
-        return self.headgroup.Placement.Base.z
+        return self.zgroup.Placement.Base.z
 
     @Z.setter
     def Z(self, value):
         if (value is not None) and (not np.isnan(value)) and (value != self.Z):
-            self.headgroup.Placement.Base.z = value
-            self.headgroup.recompute()
+            self.zgroup.Placement.Base.z = value
+            self.zgroup.recompute()
             self.mvalid = False
 
     @property
@@ -531,13 +458,18 @@ class Machine:
         self.trace.Points = self.dummytrace
         self.doc.recompute()
 
-    #		self.trace.ViewObject.Visibility = False
     def setWorkpiece(self, value):
         self.workpiece.ViewObject.LinkVisibility = value
         self.workpiece.ViewObject.Visibility = False
 
     def Trace(self):
-        v = self.G2L.multiply(Vector(-self.Y, self.X, self.Z - self.beamlength))
+        if self.gimbalY:
+            X = self.X
+            Y = self.Y
+        else:
+            X = -self.Y
+            Y = self.X
+        v = self.G2L.multiply(Vector(X, Y, self.Z - self.beamlength))
         self.tracepoints.append(v)
         if len(self.tracepoints) >= 2:
             self.trace.Points = self.tracepoints
