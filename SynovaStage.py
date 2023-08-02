@@ -330,7 +330,7 @@ class Machine:
         self.doc = doc
         self.beamlength = 52
         self.g = 52  # distance between the center of table and B rotation axis
-        self.gimbalY = False  # define whether gimbal rotates around X or Y
+        self.gimbalY = True if axesinfo[3][0] is 'B' else False  # define whether gimbal rotates around X or Y
         self.gimbalDev = 0  # define gimbal axis angle deviation from cartesian axis (for error compensation testing)
         self.xyDev = 0  # define XY orthogonality deviation (for error compensation testing)
         self.xzDev = 0  # define XZ orthogonality deviation (for error compensation testing)
@@ -516,7 +516,6 @@ class MachineGui(QtGui.QMainWindow):
         self.setGeometry(10, 30, 250, 355)
         self.setWindowTitle("Synova Stage v.1")
         self.setWindowFlags(QtCore.Qt.WindowStaysOnTopHint)
-        #		grid = QtGui.QGridLayout(self)
         self.beamlabel = QtGui.QLabel('Beam length', self)
         self.beamlabel.setGeometry(15, 5, 60, 20)
         self.beambox = QtGui.QLineEdit(f'{float(self.machine.BeamLength):8.3f}', self)
@@ -645,8 +644,6 @@ class MachineGui(QtGui.QMainWindow):
         self.XYZBC = (0, 0, Z0, 0, 0, None)
         self.machine.XYZBC = (0, 0, Z0, 0, 0, None)
 
-    # def rateMove(self):
-    # 	self.runIncr = 0.2+self.rates.value()*0.01*1.8
     def selectAxis(self):
         i = self.sender().tag
         self.runAxes[i] = self.checks[i].isChecked()
@@ -864,7 +861,7 @@ def InitDll():
 
 
 doc = App.newDocument('SynovaStage')
-axesinfo = (('X', -90, 90), ('Y', -200, 200), ('Z', 0, 350), ('B', -90, 90), ('C', -180, 180))  # motion limits
+axesinfo = (('X', -90, 90), ('Y', -200, 200), ('Z', 0, 350), ('A', -90, 90), ('C', -180, 180))  # motion limits
 machine = Machine(doc, axesinfo)
 doc.recompute()
 Gui.SendMsgToActiveView("ViewFit")
