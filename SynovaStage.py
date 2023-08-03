@@ -241,7 +241,7 @@ def BaseBox(doc, dim, name):
     body.ViewObject.Visibility = False
     return body
 
-def Build(doc, g, b, gimbalY):
+def Build(doc, g, b, gimbalOnY, gimbalDevYaw, gimbalDevRoll):
     # Create components and build kinematics
     machine_len = 750; machine_wid = 550; machine_he = 250
 
@@ -268,6 +268,7 @@ def Build(doc, g, b, gimbalY):
     gimbalframe = Gimbal(doc, (318, 130, 25, 159, 0, 0, 20, 65, 0, g + 25 + 25, 49, 32.5, -20, math.sqrt(77 * 77 + 130 * 130 / 4.)))
     gimbalframe.Label = 'GimbalFrame'
     gimbalframegroup = LinkGroup(doc, (gimbalframe, gimbalgroup), 'GimbalBaseGroup')
+    gimbalframegroup.Placement = App.Placement(App.Vector(0, 0, 0), App.Rotation(gimbalDevYaw, 0, gimbalDevRoll))
 
     # Laser beam
     beam = Draft.makeWire([Vector(0, 0, 0), Vector(0, 0, -b)])
@@ -304,10 +305,10 @@ def Build(doc, g, b, gimbalY):
     par1 = 275; par2 = g + 25 + 25 + 40
     bed = BaseBox(doc, (machine_len, machine_wid, machine_he, par1-machine_len, -machine_wid/2, -par2-machine_he), 'Bed')
     machine = LinkGroup(doc, (bed, basegroup, gimbalframegroup), 'Machine')
-    if not gimbalY:
+    if not gimbalOnY:
         # Gimbal should rotate around axis X, means that the coordinate system should be rotated by 90 deg.
         # instead, rotate the machine by -90 degrees to make the gimbal rotating around X axis
-        # as a result axis X becomes -Y, axis Y becomes X
+        # as a result axis X_new = -Y, axis Y_new = X
         machine.Placement = App.Placement(App.Vector(0,0,0),App.Rotation(App.Vector(0,0,1),-90))
 
     # Colorize
@@ -328,19 +329,19 @@ def Build(doc, g, b, gimbalY):
 
 
 class Machine:
-    def __init__(self, doc, axesinfo, g, beamlength):
+    def __init__(self, doc, axesinfo, g, beamlength, gimbalDevYaw, gimbalDevRoll):
         FreeCAD.Console.PrintMessage('>>>>Machine Start\n')
         self.doc = doc
         self.axesinfo = axesinfo
         self.g = g  # distance between the center of table surface and the intersection of rotational axes
         self.beamlength = beamlength
-        self.xyDev = 0  # define XY orthogonality deviation (for error compensation testing)
-        self.xzDev = 0  # define XZ orthogonality deviation (for error compensation testing)
-        self.yzDev = 0  # define YZ orthogonality deviation (for error compensation testing)
-        self.gimbalDev = 0  # define gimbal axis orthogonality deviation from cartesian axis (for error compensation testing)
-        self.gimbalY = True if axesinfo[3][0] is 'B' else False  # define whether gimbal rotates around X or Y
+        self.gimbalDevYaw = gimbalDevYaw
+        self.gimbalDevRoll = gimbalDevRoll
+        self.gimbalOnY = True if axesinfo[3][0] is 'B' else False  # define whether gimbal rotates around X or Y
         try:
-            self.machine, self.basegroup, self.gantryGroup, self.gantryaxgroup, self.crossaxgroup, self.zgroup, self.beam, self.gimbalframegroup, self.gimbalgroup, self.indexergroup, self.workpiece, self.trace = Build(doc, self.g, self.beamlength, self.gimbalY)
+            self.machine, self.basegroup, self.gantryGroup, self.gantryaxgroup, self.crossaxgroup, self.zgroup, \
+            self.beam, self.gimbalframegroup, self.gimbalgroup, self.indexergroup, self.workpiece, self.trace = \
+                Build(doc, self.g, self.beamlength, self.gimbalOnY, gimbalDevRoll, gimbalDevRoll)
         except Exception as ex:
             print(ex)
         self.transMatrixInv, self.mvalid = Matrix(), True
@@ -364,7 +365,7 @@ class Machine:
     def TransMatrixInv(self):
         if self.mvalid:
             return self.transMatrixInv
-        transMatrix = self.gimbalgroup.Placement.Matrix * self.indexergroup.Placement.Matrix
+        transMatrix = self.gimbalframegroup.Placement.Matrix * self.gimbalgroup.Placement.Matrix * self.indexergroup.Placement.Matrix
         self.transMatrixInv = transMatrix.inverse()
         self.mvalid = True
         return self.transMatrixInv
@@ -385,41 +386,41 @@ class Machine:
 
     @property
     def X(self):
-        if self.gimbalY:
+        if self.gimbalOnY:
             return self.gantryaxgroup.Placement.Base.x
         else:
-            # The coordinate system was rotated by 90 deg, so X becomes Y
+            # The coordinate system was rotated by 90 deg, so X_new = Y
             return self.crossaxgroup.Placement.Base.y
 
     @X.setter
     def X(self, value):
         if (value is not None) and (not np.isnan(value)) and (value != self.X):
             
-            if self.gimbalY:
+            if self.gimbalOnY:
                 self.gantryaxgroup.Placement.Base.x = value
                 self.gantryaxgroup.recompute()
             else:
-                # The coordinate system was rotated by 90 deg, so X becomes Y
+                # The coordinate system was rotated by 90 deg, so X_new = Y
                 self.crossaxgroup.Placement.Base.y = value
                 self.crossaxgroup.recompute()
             self.mvalid = False
 
     @property
     def Y(self):
-        if self.gimbalY:
+        if self.gimbalOnY:
             return self.crossaxgroup.Placement.Base.y
         else:
-            # The coordinate system was rotated by 90 deg, so Y becomes -X
+            # The coordinate system was rotated by 90 deg, so Y_new = -X
             return -self.gantryaxgroup.Placement.Base.x
 
     @Y.setter
     def Y(self, value):
         if (value is not None) and (not np.isnan(value)) and (value != self.Y):
-            if self.gimbalY:
+            if self.gimbalOnY:
                 self.crossaxgroup.Placement.Base.y = value
                 self.crossaxgroup.recompute()
             else:
-                # The coordinate system was rotated by 90 deg, so Y becomes -X
+                # The coordinate system was rotated by 90 deg, so Y_new = -X
                 self.gantryaxgroup.Placement.Base.x = -value
                 self.gantryaxgroup.recompute()
             self.mvalid = False
@@ -464,7 +465,18 @@ class Machine:
     @XYZBC.setter
     def XYZBC(self, value):
         while len(value) < 6: value.append(None)
+
+        # if value[0] is not None:
+        #     compVec = self.CompensateGimbalOrthogonality(Vector(value[0], self.Y, self.Z))
+        # elif value[1] is not None:
+        #     compVec = self.CompensateGimbalOrthogonality(Vector(self.X, value[1], self.Z))
+        # elif value[2] is not None:
+        #     compVec = self.CompensateGimbalOrthogonality(Vector(self.X, self.Y, value[2]))
+        # self.X, self.Y, self.Z, self.B, self.C, self.BeamLength = \
+        # compVec[0], compVec[1], compVec[2], value[3], value[4], value[5]
+
         self.X, self.Y, self.Z, self.B, self.C, self.BeamLength = value
+
         if self.totrace: self.Trace()
 
     def setTrace(self, value):
@@ -480,21 +492,28 @@ class Machine:
         self.workpiece.ViewObject.Visibility = False
 
     def Trace(self):
-        if self.gimbalY:
+        if self.gimbalOnY:
             X = self.X
             Y = self.Y
         else:
-            # The coordinate system was rotated by 90 deg, so X becomes Y, and Y becomes -X
+            # The coordinate system was rotated by 90 deg, so X_new (self.X) = Y, and Y_new (self.Y) = -X
             X = -self.Y
             Y = self.X
+        Z = self.Z - self.beamlength
         # Transform the current laser tip point coordinates xyz to the current processing point on the workpiece
         # coordinates xyz considering the rotation of gimbal and table axes by multiplying by inv. transformation matrix
-        v = self.TransMatrixInv.multiply(Vector(X, Y, self.Z - self.beamlength))
-        self.tracepoints.append(v)
+        compVector = self.CompensateGimbalOrthogonality(Vector(X, Y, Z))
+        transVector = self.TransMatrixInv.multiply(compVector)
+        # transVector = self.TransMatrixInv.multiply(Vector(X, Y, Z))
+        self.tracepoints.append(transVector)
         if len(self.tracepoints) >= 2:
             self.trace.Points = self.tracepoints
             self.trace.Closed = False
             self.doc.recompute()
+
+    def CompensateGimbalOrthogonality(self, inVector):
+        compVector = self.gimbalframegroup.Placement.Matrix.multiply(inVector)
+        return compVector
 
     def GetKinematicMatricesByPrincipal(self, b, c):
         b, c = b * math.pi / 180, c * math.pi / 180
@@ -884,7 +903,10 @@ doc = App.newDocument('SynovaStage')
 axesinfo = (('X', -90, 90), ('Y', -200, 200), ('Z', 0, 350), ('A', -90, 90), ('C', -180, 180))  # motion limits
 g = 52
 beamlength = 52
-machine = Machine(doc, axesinfo, g, beamlength)
+# gimbal axis orthogonality deviation from cartesian axes (for orthogonality test)
+gimbalDevYaw = 0
+gimbalDevRoll = 0
+machine = Machine(doc, axesinfo, g, beamlength, gimbalDevYaw, gimbalDevRoll)
 doc.recompute()
 Gui.SendMsgToActiveView("ViewFit")
 Gui.activeDocument().activeView().viewIsometric()
