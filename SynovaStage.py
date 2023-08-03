@@ -279,32 +279,35 @@ def Build(doc, g, b, gimbalY):
     head = Head(doc, (head_small_rad, head_small_height, head_large_rad, head_large_height, 0, head_box_len, head_box_wid, head_box_height))
     zgroup = LinkGroup(doc, (head, beamlink), 'ZGroup')
 
-    # X group: travel base for Z axis
-    xb_len = 40; xb_wid = head_box_wid; xb_he = 500
-    xbase = BaseBox(doc, (xb_len, xb_wid, xb_he, -xb_len - head_box_len/2, -xb_wid/2, g*2), 'X')
-    xgroup = LinkGroup(doc, (xbase, zgroup), 'XGroup')
+    # Cross axis group: travel base for Z axis
+    ca_len = 40; ca_wid = head_box_wid; ca_he = 500
+    crossaxbase = BaseBox(doc, (ca_len, ca_wid, ca_he, -ca_len - head_box_len/2, -ca_wid/2, g*2), 'CrossAxis')
+    crossaxgroup = LinkGroup(doc, (crossaxbase, zgroup), 'CrossAxisGroup')
 
-    # Y group: travel base for X axis
-    yb_len = 150; yb_wid = machine_wid; yb_he = 150
-    ybase = BaseBox(doc, (yb_len, yb_wid, yb_he, -yb_len - xb_len - head_box_len/2, -yb_wid/2, g*2), 'Y')
-    ygroup = LinkGroup(doc, (ybase, xgroup), 'YGroup')
+    # Gantry axis group: travel base for the cross axis
+    ga_len = 150; ga_wid = machine_wid; ga_he = 150
+    gantryaxbase = BaseBox(doc, (ga_len, ga_wid, ga_he, -ga_len - ca_len - head_box_len/2, -ga_wid/2, g*2), 'GantryAxis')
+    gantryaxgroup = LinkGroup(doc, (gantryaxbase, crossaxgroup), 'GantryAxisGroup')
 
-    #Gantry
+    # Gantry construction
     gim_offs = 100
     gan_len = machine_len; gan_width = machine_wid; gan_height = g*2
     gantry = Gantry(doc, (gan_len, machine_wid, gan_height, gim_offs, 0, gan_height))
-    gantryGroup = LinkGroup(doc, (gantry[0], gantry[1], ygroup), 'GantryGroup')
+    gantrygroup = LinkGroup(doc, (gantry[0], gantry[1], gantryaxgroup), 'GantryGroup')
 
-    #Gantry basis group
+    # Basis group
     b_len = gan_len; b_wid = gan_width; b_he = 40
     base = BaseBox(doc, (b_len, b_wid, b_he, -gan_len/2-gim_offs, -b_wid/2, -(g + 25 + 25 + 40)), '')
-    basegroup = LinkGroup(doc, (base, gantryGroup), 'BaseGroup')
+    basegroup = LinkGroup(doc, (base, gantrygroup), 'BaseGroup')
 
-    #Machine
+    # Machine group
     par1 = 275; par2 = g + 25 + 25 + 40
     bed = BaseBox(doc, (machine_len, machine_wid, machine_he, par1-machine_len, -machine_wid/2, -par2-machine_he), 'Bed')
     machine = LinkGroup(doc, (bed, basegroup, gimbalframegroup), 'Machine')
-    if not gimbalY: # rotate the machine by -90 deg. to make the gimbal rotating around X axis
+    if not gimbalY:
+        # Gimbal should rotate around axis X, means that the coordinate system should be rotated by 90 deg.
+        # instead, rotate the machine by -90 degrees to make the gimbal rotating around X axis
+        # as a result axis X becomes -Y, axis Y becomes X
         machine.Placement = App.Placement(App.Vector(0,0,0),App.Rotation(App.Vector(0,0,1),-90))
 
     # Colorize
@@ -315,46 +318,56 @@ def Build(doc, g, b, gimbalY):
     gimbalframe.ViewObject.ShapeColor = (1., 170. / 255, 1.)
     beam.ViewObject.LineColor = (1., 1., 1.)
     head.ViewObject.ShapeColor = (84. / 255, 193. / 255, 1.)
-    xbase.ViewObject.ShapeColor = (1., 0., 0.)
-    ybase.ViewObject.ShapeColor = (0., 1., 0.)
+    crossaxbase.ViewObject.ShapeColor = (1., 0., 0.)
+    gantryaxbase.ViewObject.ShapeColor = (0., 1., 0.)
     base.ViewObject.ShapeColor = (1., 1., 127. / 255)
     for gantry_part in gantry:
         gantry_part.ViewObject.ShapeColor = (1., 0., 0.)
 
-    return (machine, basegroup, gantryGroup, ygroup, xgroup, zgroup, beamlink, gimbalframegroup, gimbalgroup, indexergroup, workpiecegroup, tracelink)
+    return (machine, basegroup, gantrygroup, gantryaxgroup, crossaxgroup, zgroup, beamlink, gimbalframegroup, gimbalgroup, indexergroup, workpiecegroup, tracelink)
 
 
 class Machine:
-    def __init__(self, doc, axesinfo):
+    def __init__(self, doc, axesinfo, g, beamlength):
         FreeCAD.Console.PrintMessage('>>>>Machine Start\n')
         self.doc = doc
-        self.beamlength = 52
-        self.g = 52  # distance between the center of table and B rotation axis
-        self.gimbalY = True if axesinfo[3][0] is 'B' else False  # define whether gimbal rotates around X or Y
-        self.gimbalDev = 0  # define gimbal axis angle deviation from cartesian axis (for error compensation testing)
+        self.axesinfo = axesinfo
+        self.g = g  # distance between the center of table surface and the intersection of rotational axes
+        self.beamlength = beamlength
         self.xyDev = 0  # define XY orthogonality deviation (for error compensation testing)
         self.xzDev = 0  # define XZ orthogonality deviation (for error compensation testing)
         self.yzDev = 0  # define YZ orthogonality deviation (for error compensation testing)
+        self.gimbalDev = 0  # define gimbal axis orthogonality deviation from cartesian axis (for error compensation testing)
+        self.gimbalY = True if axesinfo[3][0] is 'B' else False  # define whether gimbal rotates around X or Y
         try:
-            self.machine, self.basegroup, self.gantryGroup, self.ygroup, self.xgroup, self.zgroup, self.beam, self.gimbalframegroup, self.gimbalgroup, self.indexergroup, self.workpiece, self.trace = Build(doc, self.g, self.beamlength, self.gimbalY)
+            self.machine, self.basegroup, self.gantryGroup, self.gantryaxgroup, self.crossaxgroup, self.zgroup, self.beam, self.gimbalframegroup, self.gimbalgroup, self.indexergroup, self.workpiece, self.trace = Build(doc, self.g, self.beamlength, self.gimbalY)
         except Exception as ex:
             print(ex)
-        self.mg2l, self.ml2g, self.mvalid = Matrix(), Matrix(), True
+        self.transMatrixInv, self.mvalid = Matrix(), True
         self.totrace, self.tracepoints = False, []
         self.dummytrace = [Vector(0, 0, -53), Vector(0, 0, -53.001)]
         self.trace.Points = self.dummytrace
         self.beamlength = -self.beam.LinkedObject.Points[1].z
-        self.axesinfo = axesinfo
         FreeCAD.Console.PrintMessage('>>>>Machine End\n')
 
     @property
-    def G2L(self):
+    # Transformation matrix from the current processing point on the workpiece to the laser tip point
+    # In this kinematics the laser tip moves in XYZ coordinates, so we only need to perform rotational transform
+    # Thus transformation matrix includes only rotational axes' placement matrices multiplication.
+    # In kinematics where the laser tip moves only in Z axis (ACS stage) the transformation matrix includes
+    # both translational axes' (XY) and rotational axes' placement matrices multiplication.
+    # In fact, we need to detect the point coordinates which is currently under the laser tip and color it in red.
+    # So, we need to transform the current laser tip point coordinates xyz to the current processing point on the workpiece
+    # coordinates xyz considering the rotation of gimbal and table axes.
+    # Thus, we need to divide the current laser tip point coordinates vector by the transformation matrix which is
+    # equivalent to multiplying by inverted transformation matrix.
+    def TransMatrixInv(self):
         if self.mvalid:
-            return self.mg2l
-        self.ml2g = self.gimbalgroup.Placement.Matrix * self.indexergroup.Placement.Matrix
-        self.mg2l = self.ml2g.inverse()
+            return self.transMatrixInv
+        transMatrix = self.gimbalgroup.Placement.Matrix * self.indexergroup.Placement.Matrix
+        self.transMatrixInv = transMatrix.inverse()
         self.mvalid = True
-        return self.mg2l
+        return self.transMatrixInv
 
     @property
     def BeamLength(self):
@@ -373,38 +386,42 @@ class Machine:
     @property
     def X(self):
         if self.gimbalY:
-            return self.ygroup.Placement.Base.x
+            return self.gantryaxgroup.Placement.Base.x
         else:
-            return self.xgroup.Placement.Base.y
+            # The coordinate system was rotated by 90 deg, so X becomes Y
+            return self.crossaxgroup.Placement.Base.y
 
     @X.setter
     def X(self, value):
         if (value is not None) and (not np.isnan(value)) and (value != self.X):
             
             if self.gimbalY:
-                self.ygroup.Placement.Base.x = value
-                self.ygroup.recompute()
+                self.gantryaxgroup.Placement.Base.x = value
+                self.gantryaxgroup.recompute()
             else:
-                self.xgroup.Placement.Base.y = value
-                self.xgroup.recompute()
+                # The coordinate system was rotated by 90 deg, so X becomes Y
+                self.crossaxgroup.Placement.Base.y = value
+                self.crossaxgroup.recompute()
             self.mvalid = False
 
     @property
     def Y(self):
         if self.gimbalY:
-            return self.xgroup.Placement.Base.y
+            return self.crossaxgroup.Placement.Base.y
         else:
-            return -self.ygroup.Placement.Base.x
+            # The coordinate system was rotated by 90 deg, so Y becomes -X
+            return -self.gantryaxgroup.Placement.Base.x
 
     @Y.setter
     def Y(self, value):
         if (value is not None) and (not np.isnan(value)) and (value != self.Y):
             if self.gimbalY:
-                self.xgroup.Placement.Base.y = value
-                self.xgroup.recompute()
+                self.crossaxgroup.Placement.Base.y = value
+                self.crossaxgroup.recompute()
             else:
-                self.ygroup.Placement.Base.x = -value
-                self.ygroup.recompute()
+                # The coordinate system was rotated by 90 deg, so Y becomes -X
+                self.gantryaxgroup.Placement.Base.x = -value
+                self.gantryaxgroup.recompute()
             self.mvalid = False
 
     @property
@@ -420,12 +437,12 @@ class Machine:
 
     @property
     def B(self):
-        return -self.gimbalgroup.Placement.Rotation.Angle / math.pi * 180
+        return self.gimbalgroup.Placement.Rotation.Angle / math.pi * 180
 
     @B.setter
     def B(self, value):
         if (value is not None) and (not np.isnan(value)) and (value != self.B):
-            self.gimbalgroup.Placement.Rotation.Angle = -value * math.pi / 180
+            self.gimbalgroup.Placement.Rotation.Angle = value * math.pi / 180
             self.gimbalgroup.recompute()
             self.mvalid = False
 
@@ -467,9 +484,12 @@ class Machine:
             X = self.X
             Y = self.Y
         else:
+            # The coordinate system was rotated by 90 deg, so X becomes Y, and Y becomes -X
             X = -self.Y
             Y = self.X
-        v = self.G2L.multiply(Vector(X, Y, self.Z - self.beamlength))
+        # Transform the current laser tip point coordinates xyz to the current processing point on the workpiece
+        # coordinates xyz considering the rotation of gimbal and table axes by multiplying by inv. transformation matrix
+        v = self.TransMatrixInv.multiply(Vector(X, Y, self.Z - self.beamlength))
         self.tracepoints.append(v)
         if len(self.tracepoints) >= 2:
             self.trace.Points = self.tracepoints
@@ -862,7 +882,9 @@ def InitDll():
 
 doc = App.newDocument('SynovaStage')
 axesinfo = (('X', -90, 90), ('Y', -200, 200), ('Z', 0, 350), ('A', -90, 90), ('C', -180, 180))  # motion limits
-machine = Machine(doc, axesinfo)
+g = 52
+beamlength = 52
+machine = Machine(doc, axesinfo, g, beamlength)
 doc.recompute()
 Gui.SendMsgToActiveView("ViewFit")
 Gui.activeDocument().activeView().viewIsometric()
