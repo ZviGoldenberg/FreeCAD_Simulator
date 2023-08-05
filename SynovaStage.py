@@ -365,7 +365,8 @@ class Machine:
     def TransMatrixInv(self):
         if self.mvalid:
             return self.transMatrixInv
-        transMatrix = self.gimbalframegroup.Placement.Matrix * self.gimbalgroup.Placement.Matrix * self.indexergroup.Placement.Matrix
+        transMatrix = self.gimbalgroup.Placement.Matrix * self.indexergroup.Placement.Matrix
+        # transMatrix = self.gimbalframegroup.Placement.Matrix * self.gimbalgroup.Placement.Matrix * self.indexergroup.Placement.Matrix
         self.transMatrixInv = transMatrix.inverse()
         self.mvalid = True
         return self.transMatrixInv
@@ -466,6 +467,8 @@ class Machine:
     def XYZBC(self, value):
         while len(value) < 6: value.append(None)
 
+        # The following is commented since it should be corrected
+        # compVec = [None, None, None]
         # if value[0] is not None:
         #     compVec = self.CompensateGimbalOrthogonality(Vector(value[0], self.Y, self.Z))
         # elif value[1] is not None:
@@ -500,11 +503,12 @@ class Machine:
             X = -self.Y
             Y = self.X
         Z = self.Z - self.beamlength
+        # The following is commented because it should be done on the laser tip coordinates, not here
         # Transform the current laser tip point coordinates xyz to the current processing point on the workpiece
         # coordinates xyz considering the rotation of gimbal and table axes by multiplying by inv. transformation matrix
-        compVector = self.CompensateGimbalOrthogonality(Vector(X, Y, Z))
-        transVector = self.TransMatrixInv.multiply(compVector)
-        # transVector = self.TransMatrixInv.multiply(Vector(X, Y, Z))
+        # compVector = self.CompensateGimbalOrthogonality(Vector(X, Y, Z))
+        # transVector = self.TransMatrixInv.multiply(compVector)
+        transVector = self.TransMatrixInv.multiply(Vector(X, Y, Z))
         self.tracepoints.append(transVector)
         if len(self.tracepoints) >= 2:
             self.trace.Points = self.tracepoints
