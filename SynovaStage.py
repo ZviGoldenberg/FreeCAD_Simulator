@@ -341,7 +341,7 @@ class Machine:
         try:
             self.machine, self.basegroup, self.gantryGroup, self.gantryaxgroup, self.crossaxgroup, self.zgroup, \
             self.beam, self.gimbalframegroup, self.gimbalgroup, self.indexergroup, self.workpiece, self.trace = \
-                Build(doc, self.g, self.beamlength, self.gimbalOnY, gimbalDevRoll, gimbalDevRoll)
+                Build(doc, self.g, self.beamlength, self.gimbalOnY, gimbalDevYaw, gimbalDevRoll)
         except Exception as ex:
             print(ex)
         self.transMatrixInv, self.mvalid = Matrix(), True
@@ -357,16 +357,10 @@ class Machine:
     # Thus transformation matrix includes only rotational axes' placement matrices multiplication.
     # In kinematics where the laser tip moves only in Z axis (ACS stage) the transformation matrix includes
     # both translational axes' (XY) and rotational axes' placement matrices multiplication.
-    # In fact, we need to detect the point coordinates which is currently under the laser tip and color it in red.
-    # So, we need to transform the current laser tip point coordinates xyz to the current processing point on the workpiece
-    # coordinates xyz considering the rotation of gimbal and table axes.
-    # Thus, we need to divide the current laser tip point coordinates vector by the transformation matrix which is
-    # equivalent to multiplying by inverted transformation matrix.
     def TransMatrixInv(self):
         if self.mvalid:
             return self.transMatrixInv
         transMatrix = self.gimbalgroup.Placement.Matrix * self.indexergroup.Placement.Matrix
-        # transMatrix = self.gimbalframegroup.Placement.Matrix * self.gimbalgroup.Placement.Matrix * self.indexergroup.Placement.Matrix
         self.transMatrixInv = transMatrix.inverse()
         self.mvalid = True
         return self.transMatrixInv
@@ -467,18 +461,23 @@ class Machine:
     def XYZBC(self, value):
         while len(value) < 6: value.append(None)
 
-        # The following is commented since it should be corrected
-        # compVec = [None, None, None]
-        # if value[0] is not None:
-        #     compVec = self.CompensateGimbalOrthogonality(Vector(value[0], self.Y, self.Z))
-        # elif value[1] is not None:
-        #     compVec = self.CompensateGimbalOrthogonality(Vector(self.X, value[1], self.Z))
-        # elif value[2] is not None:
-        #     compVec = self.CompensateGimbalOrthogonality(Vector(self.X, self.Y, value[2]))
-        # self.X, self.Y, self.Z, self.B, self.C, self.BeamLength = \
-        # compVec[0], compVec[1], compVec[2], value[3], value[4], value[5]
+        if value[0] != None and value[1] != None and value[2] != None and value[3] != None and value[4] != None:
+            # Real data, not from the sliders
+            # Compensate gimbal orthogonality deviation from XYZ axes
+            compVec = self.CompensateGimbalOrthogonality(Vector(value[0], value[1], value[2]))
 
-        self.X, self.Y, self.Z, self.B, self.C, self.BeamLength = value
+            # compVec = [None, None, None]
+            # if value[0] is not None:
+                # compVec = self.CompensateGimbalOrthogonality(Vector(value[0], self.Y, self.Z))
+            # elif value[1] is not None:
+                # compVec = self.CompensateGimbalOrthogonality(Vector(self.X, value[1], self.Z))
+            # elif value[2] is not None:
+                # compVec = self.CompensateGimbalOrthogonality(Vector(self.X, self.Y, value[2]))
+
+            self.X, self.Y, self.Z, self.B, self.C, self.BeamLength = \
+            compVec[0], compVec[1], compVec[2], value[3], value[4], value[5]
+        else:
+            self.X, self.Y, self.Z, self.B, self.C, self.BeamLength = value
 
         if self.totrace: self.Trace()
 
@@ -495,6 +494,11 @@ class Machine:
         self.workpiece.ViewObject.Visibility = False
 
     def Trace(self):
+        # We want to color the point in gimbal space which is tangent to the laser tool tip.
+        # If gimbal is in the initial state then we will color the (x,y,z-beamlenth) point which fits the tool tip
+        # point coordinates. If gimbal is rotated, we want to color a new point which is currently tangent to the
+        # tool tip. To indicate this new point we should "rotate" the gimbal back to the opposite direction.
+        # We do it by multiplying the (x,y,z-beamlenth) point by inverse gimbal rotation matrix
         if self.gimbalOnY:
             X = self.X
             Y = self.Y
@@ -503,12 +507,14 @@ class Machine:
             X = -self.Y
             Y = self.X
         Z = self.Z - self.beamlength
-        # The following is commented because it should be done on the laser tip coordinates, not here
-        # Transform the current laser tip point coordinates xyz to the current processing point on the workpiece
-        # coordinates xyz considering the rotation of gimbal and table axes by multiplying by inv. transformation matrix
-        # compVector = self.CompensateGimbalOrthogonality(Vector(X, Y, Z))
-        # transVector = self.TransMatrixInv.multiply(compVector)
-        transVector = self.TransMatrixInv.multiply(Vector(X, Y, Z))
+
+        # If gimbal frame is shifted and not orthogonal to XYZ axes then all gimbal coordinates are also shifted.
+        # To compensate this shift we should multiply by inverse gimbal frame rotation matrix
+        compVector = self.CompensateGimbalOrthogonalityInv(Vector(X, Y, Z))
+        transVector = self.TransMatrixInv.multiply(compVector)
+
+        # transVector = self.TransMatrixInv.multiply(Vector(X, Y, Z))
+
         self.tracepoints.append(transVector)
         if len(self.tracepoints) >= 2:
             self.trace.Points = self.tracepoints
@@ -517,6 +523,10 @@ class Machine:
 
     def CompensateGimbalOrthogonality(self, inVector):
         compVector = self.gimbalframegroup.Placement.Matrix.multiply(inVector)
+        return compVector
+
+    def CompensateGimbalOrthogonalityInv(self, inVector):
+        compVector = self.gimbalframegroup.Placement.Matrix.inverse().multiply(inVector)
         return compVector
 
     def GetKinematicMatricesByPrincipal(self, b, c):
@@ -702,16 +712,22 @@ class MachineGui(QtGui.QMainWindow):
     def Animate(self):
         self.Run = not self.Run
         if not self.Run: return
-        value = list(self.machine.XYZBC)
-        incr = [1, 1, 1, 1, 1]
-        while self.Run:
-            for i, a in zip(range(5), self.machine.axesinfo):
-                if (self.runAxes[i]):
-                    value[i], incr[i] = self.AnimationStep(value[i], incr[i], a[1], a[2])
-            self.XYZBC = value
-            self.machine.XYZBC = value
-            FreeCAD.Gui.updateGui()
-            time.sleep(0.01)
+
+        # For testing:
+        self.ZeroAll()
+        for xpos in range(50):
+            self.machine.XYZBC = (xpos, 0, 0, 0, 0, None)
+
+        # value = list(self.machine.XYZBC)
+        # incr = [1, 1, 1, 1, 1]
+        # while self.Run:
+        #     for i, a in zip(range(5), self.machine.axesinfo):
+        #         if (self.runAxes[i]):
+        #             value[i], incr[i] = self.AnimationStep(value[i], incr[i], a[1], a[2])
+        #     self.XYZBC = value
+        #     self.machine.XYZBC = value
+        #     FreeCAD.Gui.updateGui()
+        #     time.sleep(0.01)
 
     def FileSelect(self):
         filename, filter = QtGui.QFileDialog.getOpenFileName(parent=self, caption='Open file', dir=self.directory,
@@ -908,7 +924,7 @@ axesinfo = (('X', -90, 90), ('Y', -200, 200), ('Z', 0, 350), ('A', -90, 90), ('C
 g = 52
 beamlength = 52
 # gimbal axis orthogonality deviation from cartesian axes (for orthogonality test)
-gimbalDevYaw = 0
+gimbalDevYaw = 45
 gimbalDevRoll = 0
 machine = Machine(doc, axesinfo, g, beamlength, gimbalDevYaw, gimbalDevRoll)
 doc.recompute()
