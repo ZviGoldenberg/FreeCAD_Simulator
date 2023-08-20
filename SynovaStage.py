@@ -1,4 +1,4 @@
-import math, time
+import math
 import platform
 import Part, Sketcher, Draft
 from FreeCAD import Vector, Matrix, Placement
@@ -241,10 +241,8 @@ def BaseBox(doc, dim, name):
     body.ViewObject.Visibility = False
     return body
 
-def Build(doc, g, b, gimbalOnY, gimbalDevYaw, gimbalDevRoll):
+def Build(doc, g, beamLen, gimbalOnY, gimbalDevYaw, gimbalDevRoll):
     # Create components and build kinematics
-    machine_len = 750; machine_wid = 550; machine_he = 250
-
     # Trace
     trace = Draft.makeWire([Vector(0, 0, 0), Vector(0, 0, -g)], closed=False, face=False)
     trace.ViewObject.Visibility = False
@@ -253,57 +251,111 @@ def Build(doc, g, b, gimbalOnY, gimbalDevYaw, gimbalDevRoll):
     # Workpiece
     # see file:///C:\Projects\ACS\5axes\AcsStageModel\FreeCad\workpiece.pdf
     # The first parameter is a distance between the machine zero and the workpiece bottom plain
-    workpiece = Workpiece(doc, (55, 70.91708, 38, 20, 3, 40, 7.5, 22))
+    workpiece = Workpiece(doc, (g, 70.917, 37.917, 17, 3, 39.5, 8, 20))
     workpiecegroup = LinkGroup(doc, (workpiece), 'WorkpieceGroup')
 
     # Indexer - axis C
-    indexer = Indexer(doc, (60, 25, g))
+    ind_rad = g
+    ind_he = g / 2
+    ind_z_offs = g
+    indexer = Indexer(doc, (ind_rad, ind_he, ind_z_offs))
     indexergroup = LinkGroup(doc, (indexer, workpiecegroup, tracelink), 'IndexerGroup')
 
     # Gimbal - axis A or B
-    gimbal = Gimbal(doc, (278, 130, 25, 139, -25, 60, 19, 40, 50, g + 25, 49, 32.5, 20, 0))
+    gim_len_0 = g * 5
+    gim_wid_1 = gim_len_0 / 2
+    gim_base_he_2 = ind_he
+    gim_len_half_3 = gim_len_0 / 2
+    gim_sub_cyl_4 = -g / 2
+    gim_base_rad_5 = ind_rad
+    gim_side_wid_6 = g / 3
+    gim_side_base_he_7 = gim_base_he_2 + g / 3
+    gim_8 = g  # not in use
+    gim_rot_center_he_9 = gim_base_he_2 + g
+    gim_side_rad_ext_10 = g
+    gim_side_rad_int_11 = g * 2/3
+    gim_hinge_wid_12 = g / 3
+    gim_13 = 0
+
+    gimbal = Gimbal(doc, (gim_len_0, gim_wid_1, gim_base_he_2, gim_len_half_3, gim_sub_cyl_4, gim_base_rad_5,
+    gim_side_wid_6, gim_side_base_he_7, gim_8, gim_rot_center_he_9, gim_side_rad_ext_10, gim_side_rad_int_11,
+    gim_hinge_wid_12, gim_13))
+
     gimbalgroup = LinkGroup(doc, (gimbal, indexergroup), 'GimbalGroup')
     gimbalgroup.Placement.Rotation.Axis = Vector(0, 1, 0)
 
-    gimbalframe = Gimbal(doc, (318, 130, 25, 159, 0, 0, 20, 65, 0, g + 25 + 25, 49, 32.5, -20, math.sqrt(77 * 77 + 130 * 130 / 4.)))
+    # Gimbal frame
+    gimf_len_0 = gim_len_0 + gim_hinge_wid_12 * 2
+    gimf_wid_1 = gim_wid_1
+    gimf_base_he_2 = gim_base_he_2
+    gimf_len_half_3 = gimf_len_0 / 2
+    gimf_sub_cyl_4 = 0
+    gimf_base_rad_5 = 0
+    gimf_side_wid_6 = gim_hinge_wid_12
+    gimf_side_base_he_7 = gimf_base_he_2 + gim_side_base_he_7
+    gimf_8 = 0  # not in use
+    gimf_rot_center_he_9 = gimf_base_he_2 + gim_rot_center_he_9
+    gimf_side_rad_ext_10 = gim_side_rad_ext_10
+    gimf_side_rad_int_11 = gim_side_rad_int_11
+    gimf_hinge_wid_12 = -gim_hinge_wid_12
+    gimf_sub_cyl_13 = math.sqrt(gim_rot_center_he_9 * gim_rot_center_he_9 + gimf_wid_1 * gimf_wid_1 / 4.)
+
+    gimbalframe = Gimbal(doc, (gimf_len_0, gimf_wid_1, gimf_base_he_2, gimf_len_half_3, gimf_sub_cyl_4,
+    gimf_base_rad_5, gimf_side_wid_6, gimf_side_base_he_7, gimf_8, gimf_rot_center_he_9, gimf_side_rad_ext_10,
+    gimf_side_rad_int_11, gimf_hinge_wid_12, gimf_sub_cyl_13))
+
     gimbalframe.Label = 'GimbalFrame'
     gimbalframegroup = LinkGroup(doc, (gimbalframe, gimbalgroup), 'GimbalBaseGroup')
     gimbalframegroup.Placement = App.Placement(App.Vector(0, 0, 0), App.Rotation(gimbalDevYaw, 0, gimbalDevRoll))
 
     # Laser beam
-    beam = Draft.makeWire([Vector(0, 0, 0), Vector(0, 0, -b)])
+    beam = Draft.makeWire([Vector(0, 0, 0), Vector(0, 0, -beamLen)])
     beam.ViewObject.Visibility = False
     beamlink = Link(doc, beam, 'Beam_')
 
     # Z group
-    head_small_rad = 15; head_small_height = g; head_large_rad = 30; head_large_height = g; head_box_len = 80; head_box_wid = 130; head_box_height = 120
+    head_small_rad = g / 3
+    head_small_height = g / 2
+    head_large_rad = g / 2
+    head_large_height = g / 2
+    head_box_len = g
+    head_box_wid = g * 1.5
+    head_box_height = g * 2
     head = Head(doc, (head_small_rad, head_small_height, head_large_rad, head_large_height, 0, head_box_len, head_box_wid, head_box_height))
     zgroup = LinkGroup(doc, (head, beamlink), 'ZGroup')
 
     # Cross axis group: travel base for Z axis
-    ca_len = 40; ca_wid = head_box_wid; ca_he = 500
-    crossaxbase = BaseBox(doc, (ca_len, ca_wid, ca_he, -ca_len - head_box_len/2, -ca_wid/2, g*2), 'CrossAxis')
+    ca_len = g / 2
+    ca_wid = head_box_wid
+    ca_z_offs = g * 2
+    ca_he = axesinfo[2][2] + head_box_height + head_large_height + head_small_height - ca_z_offs
+    crossaxbase = BaseBox(doc, (ca_len, ca_wid, ca_he, -ca_len - head_box_len/2, -ca_wid/2, ca_z_offs), 'CrossAxis')
     crossaxgroup = LinkGroup(doc, (crossaxbase, zgroup), 'CrossAxisGroup')
 
+    machine_len = gimf_len_0 * 1.5
+    machine_wid = gimf_len_0
+    machine_he = gimf_len_0 / 2
+
     # Gantry axis group: travel base for the cross axis
-    ga_len = 150; ga_wid = machine_wid; ga_he = 150
-    gantryaxbase = BaseBox(doc, (ga_len, ga_wid, ga_he, -ga_len - ca_len - head_box_len/2, -ga_wid/2, g*2), 'GantryAxis')
+    ga_len = machine_wid / 4; ga_wid = machine_wid; ga_he = ga_len
+    gantryaxbase = BaseBox(doc, (ga_len, ga_wid, ga_he, -ga_len - ca_len - head_box_len/2, -ga_wid/2, ca_z_offs), 'GantryAxis')
     gantryaxgroup = LinkGroup(doc, (gantryaxbase, crossaxgroup), 'GantryAxisGroup')
 
     # Gantry construction
-    gim_offs = 100
+    gim_offs = G
     gan_len = machine_len; gan_width = machine_wid; gan_height = g*2
     gantry = Gantry(doc, (gan_len, machine_wid, gan_height, gim_offs, 0, gan_height))
     gantrygroup = LinkGroup(doc, (gantry[0], gantry[1], gantryaxgroup), 'GantryGroup')
 
     # Basis group
-    b_len = gan_len; b_wid = gan_width; b_he = 40
-    base = BaseBox(doc, (b_len, b_wid, b_he, -gan_len/2-gim_offs, -b_wid/2, -(g + 25 + 25 + 40)), '')
+    b_len = gan_len; b_wid = gan_width; b_he = g / 2
+    b_z_offs = g + gim_base_he_2 + gimf_base_he_2 + b_he
+    base = BaseBox(doc, (b_len, b_wid, b_he, -b_len/2-gim_offs, -b_wid/2, -b_z_offs), 'BaseGroup')
     basegroup = LinkGroup(doc, (base, gantrygroup), 'BaseGroup')
 
     # Machine group
-    par1 = 275; par2 = g + 25 + 25 + 40
-    bed = BaseBox(doc, (machine_len, machine_wid, machine_he, par1-machine_len, -machine_wid/2, -par2-machine_he), 'Bed')
+    machine_z_offs = b_z_offs + machine_he
+    bed = BaseBox(doc, (machine_len, machine_wid, machine_he, -machine_len/2-gim_offs, -machine_wid/2, -machine_z_offs), 'Bed')
     machine = LinkGroup(doc, (bed, basegroup, gimbalframegroup), 'Machine')
     if not gimbalOnY:
         # Gimbal should rotate around axis X, means that the coordinate system should be rotated by 90 deg.
@@ -693,7 +745,7 @@ class MachineGui(QtGui.QMainWindow):
     def ZeroAll(self):
         inside_table_part = 3
         WP_Height = 70.9 - inside_table_part
-        Z0 = (WP_Height - self.machine.g + self.machine.beamlength) if self.workpiece.isChecked() else 0
+        Z0 = (WP_Height - self.machine.g + self.machine.beamlength) if self.workpiece.isChecked() else self.machine.beamlength
         self.XYZBC = (0, 0, Z0, 0, 0, None)
         self.machine.XYZBC = (0, 0, Z0, 0, 0, None)
 
@@ -918,15 +970,19 @@ def InitDll():
     lib.GetRotAxesModel.argtypes = [np.ctypeslib.ndpointer(dtype=np.int32)]
     return lib
 
+# Stage parameters
+# Axes definitions and travel ranges. 'A' - gimbal rotates around X, 'B' - gimbal rotates around Y
+axesinfo = (('X', -100, 100), ('Y', -200, 200), ('Z', 0, 350), ('A', -90, 90), ('C', -180, 180))
+G = 50  # The distance between the rotational axis intersection and the table surface
+beamlength = 50
 
-doc = App.newDocument('SynovaStage')
-axesinfo = (('X', -90, 90), ('Y', -200, 200), ('Z', 0, 350), ('A', -90, 90), ('C', -180, 180))  # motion limits
-g = 52
-beamlength = 52
-# gimbal axis orthogonality deviation from cartesian axes (for orthogonality test)
-gimbalDevYaw = 45
+# Gimbal axis orthogonality deviation from cartesian axes (for error compensation testing)
+gimbalDevYaw = 0
 gimbalDevRoll = 0
-machine = Machine(doc, axesinfo, g, beamlength, gimbalDevYaw, gimbalDevRoll)
+
+# Stage initialization
+doc = App.newDocument('SynovaStage')
+machine = Machine(doc, axesinfo, G, beamlength, gimbalDevYaw, gimbalDevRoll)
 doc.recompute()
 Gui.SendMsgToActiveView("ViewFit")
 Gui.activeDocument().activeView().viewIsometric()
