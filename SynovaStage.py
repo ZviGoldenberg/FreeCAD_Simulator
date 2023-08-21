@@ -1,4 +1,4 @@
-import math
+import math, time
 import platform
 import Part, Sketcher, Draft
 from FreeCAD import Vector, Matrix, Placement
@@ -211,7 +211,7 @@ def Gantry(doc, dim):
     # Builds a box frame. Currently builds the basis consisting of 4 thin boxes standing on 4 thin columns. In the future consider using dodo WB frames
     #Input: dim[0]=length, dim[1]=width, dim[2]=height, dim[3]=len offs, dim[4]=wid offs, dim[5]=height offs
     # see file:///C:\Projects\ACS\5axes\AcsStageModel\FreeCad\acsstage.pdf
-    boxThick = 5
+    boxThick = dim[2] / 20  # gantry height / 20
 
     # right bottom side
     body1 = doc.addObject('PartDesign::Body', 'GantryBody1')
@@ -743,11 +743,11 @@ class MachineGui(QtGui.QMainWindow):
         self.pstart.setStyleSheet('color: red;' if self.run else 'color: black;')
 
     def ZeroAll(self):
-        inside_table_part = 3
-        WP_Height = 70.9 - inside_table_part
+        WP_Height = 70.917
         Z0 = (WP_Height - self.machine.g + self.machine.beamlength) if self.workpiece.isChecked() else self.machine.beamlength
         self.XYZBC = (0, 0, Z0, 0, 0, None)
         self.machine.XYZBC = (0, 0, Z0, 0, 0, None)
+        return Z0
 
     def selectAxis(self):
         i = self.sender().tag
@@ -765,21 +765,22 @@ class MachineGui(QtGui.QMainWindow):
         self.Run = not self.Run
         if not self.Run: return
 
-        # For testing:
-        self.ZeroAll()
-        for xpos in range(50):
-            self.machine.XYZBC = (xpos, 0, 0, 0, 0, None)
-
-        # value = list(self.machine.XYZBC)
-        # incr = [1, 1, 1, 1, 1]
-        # while self.Run:
-        #     for i, a in zip(range(5), self.machine.axesinfo):
-        #         if (self.runAxes[i]):
-        #             value[i], incr[i] = self.AnimationStep(value[i], incr[i], a[1], a[2])
-        #     self.XYZBC = value
-        #     self.machine.XYZBC = value
-        #     FreeCAD.Gui.updateGui()
-        #     time.sleep(0.01)
+        if gimbalDevYaw != 0 or gimbalDevRoll != 0:
+            # For testing:
+            z = self.ZeroAll()
+            for xpos in range(50):
+                self.machine.XYZBC = (xpos, 0, z, 0, 0, None)
+        else:
+            value = list(self.machine.XYZBC)
+            incr = [1, 1, 1, 1, 1]
+            while self.Run:
+                for i, a in zip(range(5), self.machine.axesinfo):
+                    if (self.runAxes[i]):
+                        value[i], incr[i] = self.AnimationStep(value[i], incr[i], a[1], a[2])
+                self.XYZBC = value
+                self.machine.XYZBC = value
+                FreeCAD.Gui.updateGui()
+                time.sleep(0.01)
 
     def FileSelect(self):
         filename, filter = QtGui.QFileDialog.getOpenFileName(parent=self, caption='Open file', dir=self.directory,
@@ -973,7 +974,7 @@ def InitDll():
 # Stage parameters
 # Axes definitions and travel ranges. 'A' - gimbal rotates around X, 'B' - gimbal rotates around Y
 axesinfo = (('X', -100, 100), ('Y', -200, 200), ('Z', 0, 350), ('A', -90, 90), ('C', -180, 180))
-G = 50  # The distance between the rotational axis intersection and the table surface
+G = 108  # The distance between the rotational axis intersection and the table surface
 beamlength = 50
 
 # Gimbal axis orthogonality deviation from cartesian axes (for error compensation testing)
