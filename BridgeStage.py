@@ -987,12 +987,12 @@ def InitDll():
 
 # Stage parameters
 # Axes definitions and travel ranges. 'A' - gimbal rotates around X, 'B' - gimbal rotates around Y
-axesinfo = (('X', -100, 100), ('Y', -200, 200), ('Z', 0, 350), ('A', -90, 90), ('C', -180, 180))
+axesinfo = (('Y', -100, 100), ('X', -200, 200), ('Z', 0, 350), ('A', -90, 90), ('C', -180, 180))
 G = 50  # The distance between the rotational axis intersection and the table surface
 beamlength = 50
 
 # Gimbal axis orthogonality deviation from cartesian axes (for error compensation testing)
-gimbalDevYaw = 0
+gimbalDevYaw = 90
 gimbalDevRoll = 0
 
 # Stage initialization
