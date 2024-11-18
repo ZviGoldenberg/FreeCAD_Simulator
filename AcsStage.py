@@ -291,7 +291,7 @@ class Machine:
     def __init__(self, doc, axesinfo):
         FreeCAD.Console.PrintMessage('>>>>Machine Start\n')
         self.doc = doc
-        self.beamlength = 52
+        self.beamlength = 127
         self.g = 52  # distance between the center of table and B rotation axis
         self.machine, self.xgroup, self.ygroup, self.zgroup, self.gimbalgroup, self.indexergroup, self.beam, self.trace, self.workpiece = Build(
             doc, self.g, self.beamlength)
@@ -661,7 +661,6 @@ class MachineGui(QtGui.QMainWindow):
             coor = 'machine'
             fixture, kinematic, ffixture, fkinematic = np.identity(4), np.identity(6), np.identity(4), np.identity(6)
             desc = None
-            flen = self.machine.BeamLength
             offs = [0, 0, 0, 0, 0, 0]
             principal1, principal2, principal3 = None, None, None
             if row.startswith('{'):
@@ -693,7 +692,7 @@ class MachineGui(QtGui.QMainWindow):
                 if (len(elsnp) > 5):
                     flen = elsnp[5]  # Receives length from the GUI window\
                 vpart = np.append(elsnp[:5], 1.0)  # Switches the input vector to homogenous form -> vpart
-                # print('vpart:', vpart)
+                print('vpart:', vpart)
                 vprincipal, vmachine = vpart, vpart  # Initialization of vprincipal, vmachine homogenous vectors
                 if coor == 'part':
                     dx, dy, dz = self.Spherical2projections(vpart[3:5])
@@ -720,6 +719,17 @@ class MachineGui(QtGui.QMainWindow):
                         mixed_dll = np.array(vpart[:5], np.float64)
                         machine_dll = np.array([0, 0, 0, 0, 0], np.float64)
                         res = self.lib.DoDirectTransform(5, mixed_dll, 5, machine_dll)
+
+                        #Testing
+                        print('dll_Z:', machine_dll[2])
+                        kinematics = np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,], np.float64)
+                        res = self.lib.GetKinematicMatrix(16, kinematics)
+                        print('kinematics', kinematics)
+                        fixture = np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, ], np.float64)
+                        res = self.lib.GetFixtureMatrix(16, fixture)
+                        print('fixture', fixture)
+
+
                         feedback_dll = np.array([0, 0, 0, 0, 0], np.float64)
                         res = self.lib.DoFeedbackTransform(5, machine_dll, 5, feedback_dll)
                         vmachine = np.append(machine_dll, 1.0)
@@ -734,7 +744,8 @@ class MachineGui(QtGui.QMainWindow):
                         kinematic, fkinematic = self.machine.GetKinematicMatricesByMachine(b, c)
                         print('kinematic:', kinematic)
                         vmachine = kinematic @ vprincipal
-                        print('vmachine:', vmachine)
+                        #print('vmachine:', vmachine)
+                        print('internal_Z:', vmachine[2])
                         # Feedback transformations
                         fprincipal = fkinematic @ vmachine
                         fpart = ffixture @ fprincipal
@@ -793,6 +804,12 @@ def InitDll():
     lib.SetCoordinatesFormat.argtypes = [ctypes.c_int]
     lib.GetRotAxesModel.restype = ctypes.c_int
     lib.GetRotAxesModel.argtypes = [np.ctypeslib.ndpointer(dtype=np.int32)]
+
+    #Testing
+    lib.GetKinematicMatrix.restype = ctypes.c_int
+    lib.GetKinematicMatrix.argtypes = [ctypes.c_int, np.ctypeslib.ndpointer(dtype=np.float64)]
+    lib.GetFixtureMatrix.restype = ctypes.c_int
+    lib.GetFixtureMatrix.argtypes = [ctypes.c_int, np.ctypeslib.ndpointer(dtype=np.float64)]
     return lib
 
 
